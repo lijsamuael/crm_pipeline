@@ -133,6 +133,12 @@ app_license = "mit"
 # 	"ToDo": "custom_app.overrides.CustomToDo"
 # }
 
+doc_events = {
+    "CRM Pipeline Status": {
+        "before_insert": "crm_pipeline.api.set_status_from_type"
+    },
+}
+
 # Document Events
 # ---------------
 # Hook on document methods and events
@@ -241,4 +247,21 @@ app_license = "mit"
 # default_log_clearing_doctypes = {
 # 	"Logging DocType Name": 30  # days to retain logs
 # }
+
+
+fixtures = [
+    {
+        "dt": "Custom Field",
+    },
+    {
+        "dt": "Client Script",
+    },
+    {
+        "dt": "DocType",
+        "filters": [["module", "=", "CRM Pipeline"]],
+    },
+    {
+        "dt": "Property Setter",
+    }
+]
 
