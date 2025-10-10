@@ -1,587 +1,769 @@
 <template>
-  <div class="min-h-screen bg-gray-50">
-    <!-- Sticky Header -->
-    <div class="sticky top-0 z-10 bg-white border-b border-gray-200">
-      <div class="px-6 py-4">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center space-x-4">
-            <button 
-              @click="router.back()"
-              class="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-            >
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
-              </svg>
-            </button>
-            <div>
-              <h1 class="text-2xl font-semibold text-gray-900">{{ pipeline.pipeline_name || pipeline.name }}</h1>
-              <div class="flex items-center space-x-4 mt-1">
-                <span class="text-sm text-gray-500">Pipeline</span>
-                <span class="text-sm text-gray-500">•</span>
-                <span class="text-sm text-gray-500">{{ pipeline.name }}</span>
-              </div>
-            </div>
+  <LayoutHeader>
+    <template #left-header>
+      <Breadcrumbs :items="breadcrumbs">
+        <template #prefix="{ item }">
+          <Icon v-if="item.icon" :icon="item.icon" class="mr-2 h-4" />
+        </template>
+      </Breadcrumbs>
+    </template>
+    <template v-if="!errorTitle" #right-header>
+      <CustomActions
+        v-if="document._actions?.length"
+        :actions="document._actions"
+      />
+      <CustomActions
+        v-if="document.actions?.length"
+        :actions="document.actions"
+      />
+      <AssignTo v-model="assignees.data" doctype="CRM Pipeline" :docname="pipelineId" />
+      
+      <!-- Change Status Button -->
+      <Dropdown
+        :options="statusOptions"
+        placement="right"
+      >
+        <template #default="{ open }">
+          <Button
+            :label="__('Change Status')"
+            :iconRight="open ? 'chevron-up' : 'chevron-down'"
+            variant="outline"
+          >
+            <template #prefix>
+              <IndicatorIcon :class="getPipelineStatus(doc.status).color" />
+            </template>
+          </Button>
+        </template>
+      </Dropdown>
+
+      <Button
+        :label="__('Convert to Deal')"
+        variant="solid"
+        @click="showConvertToDealModal = true"
+      />
+
+      <!-- Save Button (shown when there are changes) -->
+      <Button
+        v-if="hasChanges"
+        :label="__('Save')"
+        variant="solid"
+        theme="green"
+        @click="saveAllChanges"
+        :loading="document.save.loading"
+      />
+    </template>
+  </LayoutHeader>
+  <div v-if="doc.name" class="flex h-full overflow-hidden">
+    <Tabs as="div" v-model="tabIndex" :tabs="tabs">
+      <template #tab-panel>
+        <!-- Activities Tab -->
+        <Activities
+          v-if="currentTab?.name === 'Activity'"
+          ref="activities"
+          doctype="CRM Pipeline"
+          :docname="pipelineId"
+          :tabs="tabs"
+          v-model:reload="reload"
+          v-model:tabIndex="tabIndex"
+          @beforeSave="saveChanges"
+          @afterSave="reloadAssignees"
+        />
+
+        <!-- Deal Tagging Tab -->
+        <div v-else-if="currentTab?.name === 'DealTagging'" class="p-5">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ __('Deal Tagging') }}</h3>
           </div>
-          <div class="flex items-center space-x-3">
-            <!-- Status Change Dropdown -->
-            <div class="relative" ref="statusDropdown">
-              <button 
-                @click="toggleStatusDropdown"
-                class="flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors text-sm font-medium"
-              >
-                <span :class="getStatusClasses(pipeline.status)" class="px-2 py-1 rounded-full text-xs font-medium">
-                  {{ pipeline.status }}
-                </span>
-                <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                </svg>
-              </button>
-
-              <!-- Status Dropdown Menu -->
-              <div 
-                v-if="showStatusDropdown"
-                class="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20"
-              >
-                <button 
-                  v-for="status in pipelineStatuses"
-                  :key="status"
-                  @click="changeStatus(status)"
-                  :disabled="status === pipeline.status"
-                  class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <span :class="getStatusClasses(status)" class="px-2 py-1 rounded-full text-xs font-medium">
-                    {{ status }}
-                  </span>
-                  <span v-if="status === pipeline.status" class="text-blue-600 text-xs">Current</span>
-                </button>
-              </div>
-            </div>
-
-            <button 
-              @click="convertToDeal"
-              :disabled="converting"
-              class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <span v-if="converting">Converting...</span>
-              <span v-else>Convert to Deal</span>
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="max-w-7xl mx-auto px-6 py-6">
-      <div class="grid grid-cols-3 gap-6">
-        <!-- Left Column - Main Content -->
-        <div class="col-span-2 space-y-6">
-          <!-- Status Card -->
-          <div class="bg-white rounded-lg border border-gray-200 shadow-sm">
-            <div class="p-6">
-              <div class="flex items-center justify-between mb-4">
-                <h3 class="text-lg font-medium text-gray-900">Pipeline Status</h3>
-                <span :class="getStatusClasses(pipeline.status)" class="px-3 py-1 rounded-full text-sm font-medium">
-                  {{ pipeline.status }}
-                </span>
-              </div>
-              
-              <div class="grid grid-cols-3 gap-4">
-                <div class="text-center p-4 bg-gray-50 rounded-lg">
-                  <div class="text-2xl font-bold text-gray-900">{{ formatCurrency(pipeline.est_pipeline_value) }}</div>
-                  <div class="text-sm text-gray-500 mt-1">Estimated Value</div>
-                </div>
-                <div class="text-center p-4 bg-gray-50 rounded-lg">
-                  <div class="text-2xl font-bold text-gray-900">{{ pipeline.deals?.length || 0 }}</div>
-                  <div class="text-sm text-gray-500 mt-1">Total Deals</div>
-                </div>
-                <div class="text-center p-4 bg-gray-50 rounded-lg">
-                  <div class="text-2xl font-bold text-gray-900">{{ formatCurrency(calculateTotalDealValue()) }}</div>
-                  <div class="text-sm text-gray-500 mt-1">Actual Value</div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Deals Section -->
-          <div class="bg-white rounded-lg border border-gray-200 shadow-sm">
-            <div class="p-6">
-              <div class="flex items-center justify-between mb-6">
-                <h3 class="text-lg font-medium text-gray-900">Deals</h3>
-                <div class="text-sm text-gray-500">{{ pipeline.deals?.length || 0 }} deals</div>
-              </div>
-
-              <div v-if="pipeline.deals && pipeline.deals.length" class="space-y-4">
-                <div 
-                  v-for="deal in pipeline.deals" 
-                  :key="deal.deal"
-                  class="border border-gray-200 rounded-lg p-4 hover:border-blue-300 transition-colors"
-                >
-                  <div class="flex items-center justify-between mb-3">
-                    <div class="flex items-center space-x-3">
-                      <div class="w-8 h-8 bg-green-500 rounded-lg flex items-center justify-center text-white font-medium text-sm">
-                        D
-                      </div>
-                      <div>
-                        <div class="font-medium text-gray-900">{{ deal.deal }}</div>
-                        <div class="text-sm text-gray-500">Probability: {{ deal.probablity }}%</div>
-                      </div>
-                    </div>
-                    <div class="text-right">
-                      <div class="font-semibold text-gray-900">{{ formatCurrency(deal.est_qoutation_sales) }}</div>
-                      <div class="text-sm text-gray-500">Expected: {{ deal.expected_deal_value }}%</div>
-                    </div>
-                  </div>
-                  
-                  <div class="grid grid-cols-3 gap-4 text-sm">
-                    <div>
-                      <div class="text-gray-500">Deal Value</div>
-                      <div class="font-medium text-gray-900">{{ formatCurrency(deal.deal_value) }}</div>
-                    </div>
-                    <div>
-                      <div class="text-gray-500">Quotation Sales</div>
-                      <div class="font-medium text-gray-900">{{ formatCurrency(deal.est_qoutation_sales) }}</div>
-                    </div>
-                    <div>
-                      <div class="text-gray-500">Owner</div>
-                      <div class="font-medium text-gray-900">{{ deal.deal_owner || 'Unassigned' }}</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              
-              <div v-else class="text-center py-8">
-                <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-                  </svg>
-                </div>
-                <h3 class="text-lg font-medium text-gray-900 mb-2">No deals yet</h3>
-                <p class="text-gray-500 text-sm mb-4">Convert this pipeline to create deals</p>
-                <button 
-                  @click="convertToDeal"
-                  class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
-                >
-                  Convert to Deal
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <!-- Status Logs Table -->
-          <div class="bg-white rounded-lg border border-gray-200 shadow-sm">
-            <div class="p-6">
-              <div class="flex items-center justify-between mb-6">
-                <h3 class="text-lg font-medium text-gray-900">Status Change History</h3>
-                <button 
-                  @click="fetchPipeline"
-                  :disabled="loading"
-                  class="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-                  title="Refresh logs"
-                >
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                  </svg>
-                </button>
-              </div>
-              
-              <div v-if="pipeline.logs && pipeline.logs.length" class="overflow-hidden">
-                <table class="min-w-full divide-y divide-gray-200">
-                  <thead class="bg-gray-50">
-                    <tr>
-                      <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Change Date
-                      </th>
-                      <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        From Status
-                      </th>
-                      <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        To Status
-                      </th>
-                      <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Duration
-                      </th>
-                      <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Log Owner
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody class="bg-white divide-y divide-gray-200">
-                    <tr 
-                      v-for="log in sortedLogs" 
-                      :key="log.name"
-                      class="hover:bg-gray-50 transition-colors"
-                    >
-                      <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {{ formatDateTime(log.from_date) }}
-                      </td>
-                      <td class="px-6 py-4 whitespace-nowrap">
-                        <span :class="getStatusClasses(log.from_status)" class="px-2 py-1 rounded-full text-xs font-medium">
-                          {{ log.from_status || '—' }}
-                        </span>
-                      </td>
-                      <td class="px-6 py-4 whitespace-nowrap">
-                        <span :class="getStatusClasses(log.to_status)" class="px-2 py-1 rounded-full text-xs font-medium">
-                          {{ log.to_status || '—' }}
-                        </span>
-                      </td>
-                      <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {{ formatDuration(log.duration) }}
-                      </td>
-                      <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        <div class="flex items-center space-x-2">
-                          <div class="w-6 h-6 bg-purple-500 rounded-full flex items-center justify-center text-xs text-white font-medium">
-                            {{ getInitials(log.log_owner) }}
-                          </div>
-                          <span>{{ log.log_owner || 'System' }}</span>
-                        </div>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-              
-              <div v-else class="text-center py-8">
-                <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                  </svg>
-                </div>
-                <p class="text-gray-500 text-sm">No status change history available</p>
-              </div>
-            </div>
+          
+          <div class="border rounded-lg overflow-hidden border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+            <table class="w-full">
+              <thead class="bg-gray-50 dark:bg-gray-700">
+                <tr>
+                  <th class="px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-300">{{ __('Deal') }}</th>
+                  <th class="px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-300">{{ __('Deal Owner') }}</th>
+                  <th class="px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-300">{{ __('Deal Value') }}</th>
+                  <th class="px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-300">{{ __('Probability') }}</th>
+                  <th class="px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-300">{{ __('Actions') }}</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-200 dark:divide-gray-600">
+                <tr v-for="(deal, index) in localDeals" :key="index" class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                  <td class="px-4 py-3">
+                    <Input
+                      type="text"
+                      v-model="deal.deal"
+                      @input="onDealsChange"
+                      :placeholder="__('Deal name')"
+                      class="bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100"
+                    />
+                  </td>
+                  <td class="px-4 py-3">
+                    <Input
+                      type="text"
+                      v-model="deal.deal_owner"
+                      @input="onDealsChange"
+                      :placeholder="__('Deal owner')"
+                      class="bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100"
+                    />
+                  </td>
+                  <td class="px-4 py-3">
+                    <Input
+                      type="number"
+                      v-model="deal.deal_value"
+                      @input="onDealsChange"
+                      :placeholder="__('0.00')"
+                      class="bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100"
+                    />
+                  </td>
+                  <td class="px-4 py-3">
+                    <Input
+                      type="number"
+                      v-model="deal.probability"
+                      @input="onDealsChange"
+                      :placeholder="__('0')"
+                      min="0"
+                      max="100"
+                      class="bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100"
+                    />
+                  </td>
+                  <td class="px-4 py-3">
+                    <Button
+                      :label="__('Delete')"
+                      variant="subtle"
+                      theme="red"
+                      icon="trash-2"
+                      @click="removeDealRow(index)"
+                    />
+                  </td>
+                </tr>
+                <tr v-if="localDeals.length === 0">
+                  <td colspan="5" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                    {{ __('No deals tagged to this pipeline.') }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
 
-        <!-- Right Column - Sidebar -->
-        <div class="space-y-6">
-          <!-- Pipeline Information -->
-          <div class="bg-white rounded-lg border border-gray-200 shadow-sm">
-            <div class="p-6">
-              <h3 class="text-lg font-medium text-gray-900 mb-4">Pipeline Information</h3>
-              
-              <div class="space-y-4">
-                <div>
-                  <label class="text-sm font-medium text-gray-500">Pipeline Owner</label>
-                  <div class="flex items-center space-x-2 mt-1">
-                    <div class="w-6 h-6 bg-purple-500 rounded-full flex items-center justify-center text-xs text-white font-medium">
-                      {{ getInitials(pipeline.pipeline_owner) }}
-                    </div>
-                    <span class="text-sm text-gray-900">{{ pipeline.pipeline_owner }}</span>
-                  </div>
-                </div>
-                
-                <div>
-                  <label class="text-sm font-medium text-gray-500">Source</label>
-                  <div class="text-sm text-gray-900 mt-1">{{ pipeline.source || '—' }}</div>
-                </div>
-                
-                <div>
-                  <label class="text-sm font-medium text-gray-500">Created</label>
-                  <div class="text-sm text-gray-900 mt-1">{{ formatDate(pipeline.creation) }}</div>
-                </div>
-                
-                <div>
-                  <label class="text-sm font-medium text-gray-500">Last Modified</label>
-                  <div class="text-sm text-gray-900 mt-1">{{ formatDate(pipeline.modified) }}</div>
-                </div>
-                
-                <div>
-                  <label class="text-sm font-medium text-gray-500">Currency</label>
-                  <div class="text-sm text-gray-900 mt-1">{{ pipeline.currency || 'USD' }}</div>
-                </div>
-                
-                <div>
-                  <label class="text-sm font-medium text-gray-500">Exchange Rate</label>
-                  <div class="text-sm text-gray-900 mt-1">{{ pipeline.exchange_rate || '1.0' }}</div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Organization Details -->
-          <div class="bg-white rounded-lg border border-gray-200 shadow-sm">
-            <div class="p-6">
-              <h3 class="text-lg font-medium text-gray-900 mb-4">Organization</h3>
-              
-              <div class="space-y-4">
-                <div>
-                  <label class="text-sm font-medium text-gray-500">Organization Name</label>
-                  <div class="text-sm text-gray-900 mt-1">{{ pipeline.organization_name || pipeline.organization }}</div>
-                </div>
-                
-                <div>
-                  <label class="text-sm font-medium text-gray-500">Website</label>
-                  <div class="text-sm text-gray-900 mt-1">
-                    <a :href="pipeline.website" target="_blank" class="text-blue-600 hover:text-blue-700">
-                      {{ pipeline.website || '—' }}
-                    </a>
-                  </div>
-                </div>
-                
-                <div>
-                  <label class="text-sm font-medium text-gray-500">Employees</label>
-                  <div class="text-sm text-gray-900 mt-1">{{ pipeline.no_of_employees || '0' }}</div>
-                </div>
-                
-                <div>
-                  <label class="text-sm font-medium text-gray-500">Territory</label>
-                  <div class="text-sm text-gray-900 mt-1">{{ pipeline.territory || '—' }}</div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Lead Information -->
-          <div v-if="pipeline.lead" class="bg-white rounded-lg border border-gray-200 shadow-sm">
-            <div class="p-6">
-              <h3 class="text-lg font-medium text-gray-900 mb-4">Lead Information</h3>
-              
-              <div class="space-y-4">
-                <div>
-                  <label class="text-sm font-medium text-gray-500">Lead</label>
-                  <div class="text-sm text-gray-900 mt-1">{{ pipeline.lead }}</div>
-                </div>
-                
-                <div>
-                  <label class="text-sm font-medium text-gray-500">Lead Name</label>
-                  <div class="text-sm text-gray-900 mt-1">{{ pipeline.lead_name }}</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+        <!-- Logs Tab -->
+<div v-else-if="currentTab?.name === 'Logs'" class="p-5">
+  <div class="flex items-center justify-between mb-4">
+    <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ __('Status Logs') }}</h3>
   </div>
+  
+  <div class="border rounded-lg overflow-hidden border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+    <table class="w-full">
+      <thead class="bg-gray-50 dark:bg-gray-700">
+        <tr>
+          <th class="px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-300">{{ __('From Status') }}</th>
+          <th class="px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-300">{{ __('To Status') }}</th>
+          <th class="px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-300">{{ __('From Date') }}</th>
+          <th class="px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-300">{{ __('To Date') }}</th>
+          <th class="px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-300">{{ __('Duration') }}</th>
+          <th class="px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-300">{{ __('Actions') }}</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-200 dark:divide-gray-600">
+        <tr v-for="(log, index) in localLogs" :key="index" class="hover:bg-gray-50 dark:hover:bg-gray-700">
+          <td class="px-4 py-3 text-gray-900 dark:text-gray-100">
+            {{ log.from_status }}
+          </td>
+          <td class="px-4 py-3 text-gray-900 dark:text-gray-100">
+            {{ log.to_status || 'Current' }}
+          </td>
+          <td class="px-4 py-3 text-gray-900 dark:text-gray-100">
+            {{ formatDate(log.from_date) }}
+          </td>
+          <td class="px-4 py-3 text-gray-900 dark:text-gray-100">
+            {{ log.to_date ? formatDate(log.to_date) : 'Ongoing' }}
+          </td>
+          <td class="px-4 py-3 text-gray-900 dark:text-gray-100">
+            {{ log.duration }}
+          </td>
+          <td class="px-4 py-3">
+            <Button
+              :label="__('Delete')"
+              variant="subtle"
+              theme="red"
+              icon="trash-2"
+              @click="removeLogRow(index)"
+            />
+          </td>
+        </tr>
+        <tr v-if="localLogs.length === 0">
+          <td colspan="6" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+            {{ __('No status logs available. Status changes will appear here automatically.') }}
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+        <!-- Default Activities for other tabs -->
+        <Activities
+          v-else
+          ref="activities"
+          doctype="CRM Pipeline"
+          :docname="pipelineId"
+          :tabs="tabs"
+          v-model:reload="reload"
+          v-model:tabIndex="tabIndex"
+          @beforeSave="saveChanges"
+          @afterSave="reloadAssignees"
+        />
+      </template>
+    </Tabs>
+    <Resizer class="flex flex-col justify-between border-l border-gray-200 dark:border-gray-700" side="right">
+      <div
+        class="flex h-10.5 cursor-copy items-center border-b border-gray-200 dark:border-gray-700 px-5 py-2.5 text-lg font-medium text-gray-900 dark:text-gray-100"
+        @click="copyToClipboard(pipelineId)"
+      >
+        {{ __(pipelineId) }}
+      </div>
+      <FileUploader
+        @success="(file) => updateField('image', file.file_url)"
+        :validateFile="validateIsImageFile"
+      >
+        <template #default="{ openFileSelector, error }">
+          <div class="flex items-center justify-start gap-5 border-b border-gray-200 dark:border-gray-700 p-5">
+            <div class="group relative size-12">
+              <Avatar
+                size="3xl"
+                class="size-12"
+                :label="title"
+                :image="doc.image"
+              />
+              <component
+                :is="doc.image ? Dropdown : 'div'"
+                v-bind="
+                  doc.image
+                    ? {
+                        options: [
+                          {
+                            icon: 'upload',
+                            label: doc.image
+                              ? __('Change image')
+                              : __('Upload image'),
+                            onClick: openFileSelector,
+                          },
+                          {
+                            icon: 'trash-2',
+                            label: __('Remove image'),
+                            onClick: () => updateField('image', ''),
+                          },
+                        ],
+                      }
+                    : { onClick: openFileSelector }
+                "
+                class="!absolute bottom-0 left-0 right-0"
+              >
+                <div
+                  class="z-1 absolute bottom-0.5 left-0 right-0.5 flex h-9 cursor-pointer items-center justify-center rounded-b-full bg-black bg-opacity-40 dark:bg-white dark:bg-opacity-20 pt-3 opacity-0 duration-300 ease-in-out group-hover:opacity-100"
+                  style="
+                    -webkit-clip-path: inset(12px 0 0 0);
+                    clip-path: inset(12px 0 0 0);
+                  "
+                >
+                  <CameraIcon class="size-4 cursor-pointer text-white dark:text-gray-100" />
+                </div>
+              </component>
+            </div>
+            <div class="flex flex-col gap-2.5 truncate">
+              <Tooltip :text="doc.pipeline_name || __('Set name')">
+                <div class="truncate text-2xl font-medium text-gray-900 dark:text-gray-100">
+                  {{ title }}
+                </div>
+              </Tooltip>
+              <div class="flex gap-1.5">
+                <Button
+                  v-if="callEnabled"
+                  :tooltip="__('Make a call')"
+                  :icon="PhoneIcon"
+                  @click="
+                    () =>
+                      doc.mobile_no
+                        ? makeCall(doc.mobile_no)
+                        : toast.error(__('No phone number set'))
+                  "
+                />
+
+                <Button
+                  :tooltip="__('Send an email')"
+                  :icon="Email2Icon"
+                  @click="
+                    doc.email ? openEmailBox() : toast.error(__('No email set'))
+                  "
+                />
+                <Button
+                  :tooltip="__('Go to website')"
+                  :icon="LinkIcon"
+                  @click="
+                    doc.website
+                      ? openWebsite(doc.website)
+                      : toast.error(__('No website set'))
+                  "
+                />
+
+                <Button
+                  :tooltip="__('Attach a file')"
+                  :icon="AttachmentIcon"
+                  @click="showFilesUploader = true"
+                />
+
+                <Button
+                  :tooltip="__('Delete')"
+                  variant="subtle"
+                  theme="red"
+                  icon="trash-2"
+                  @click="deletePipeline"
+                />
+              </div>
+              <ErrorMessage :message="__(error)" />
+            </div>
+          </div>
+        </template>
+      </FileUploader>
+      <SLASection
+        v-if="doc.sla_status"
+        v-model="doc"
+        @updateField="updateField"
+      />
+      <div
+        v-if="sections.data"
+        class="flex flex-1 flex-col justify-between overflow-hidden"
+      >
+        <SidePanelLayout
+          :sections="sections.data"
+          doctype="CRM Pipeline"
+          :docname="pipelineId"
+          @reload="sections.reload"
+          @afterFieldChange="reloadAssignees"
+        />
+      </div>
+    </Resizer>
+  </div>
+  <ErrorPage
+    v-else-if="errorTitle"
+    :errorTitle="errorTitle"
+    :errorMessage="errorMessage"
+  />
+  <ConvertPipelineToDealModal
+    v-if="showConvertToDealModal"
+    v-model="showConvertToDealModal"
+    :pipeline="doc"
+  />
+  <FilesUploader
+    v-model="showFilesUploader"
+    doctype="CRM Pipeline"
+    :docname="pipelineId"
+    @after="
+      () => {
+        activities?.all_activities?.reload()
+        changeTabTo('attachments')
+      }
+    "
+  />
+  <DeleteLinkedDocModal
+    v-if="showDeleteLinkedDocModal"
+    v-model="showDeleteLinkedDocModal"
+    :doctype="'CRM Pipeline'"
+    :docname="pipelineId"
+    name="Pipelines"
+  />
 </template>
 
 <script setup>
-import { ref, onMounted, computed, onUnmounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import { call, toast } from 'frappe-ui'
+import DeleteLinkedDocModal from '@/components/DeleteLinkedDocModal.vue'
+import ErrorPage from '@/components/ErrorPage.vue'
+import Icon from '@/components/Icon.vue'
+import Resizer from '@/components/Resizer.vue'
+import ActivityIcon from '@/components/Icons/ActivityIcon.vue'
+import EmailIcon from '@/components/Icons/EmailIcon.vue'
+import Email2Icon from '@/components/Icons/Email2Icon.vue'
+import CommentIcon from '@/components/Icons/CommentIcon.vue'
+import DetailsIcon from '@/components/Icons/DetailsIcon.vue'
+import PhoneIcon from '@/components/Icons/PhoneIcon.vue'
+import TaskIcon from '@/components/Icons/TaskIcon.vue'
+import NoteIcon from '@/components/Icons/NoteIcon.vue'
+import WhatsAppIcon from '@/components/Icons/WhatsAppIcon.vue'
+import IndicatorIcon from '@/components/Icons/IndicatorIcon.vue'
+import CameraIcon from '@/components/Icons/CameraIcon.vue'
+import LinkIcon from '@/components/Icons/LinkIcon.vue'
+import AttachmentIcon from '@/components/Icons/AttachmentIcon.vue'
+import LayoutHeader from '@/components/LayoutHeader.vue'
+import Activities from '@/components/Activities/Activities.vue'
+import AssignTo from '@/components/AssignTo.vue'
+import FilesUploader from '@/components/FilesUploader/FilesUploader.vue'
+import SidePanelLayout from '@/components/SidePanelLayout.vue'
+import SLASection from '@/components/SLASection.vue'
+import CustomActions from '@/components/CustomActions.vue'
+import ConvertPipelineToDealModal from '@/components/Modals/ConvertPipelineToDealModal.vue'
+import {
+  openWebsite,
+  setupCustomizations,
+  copyToClipboard,
+  validateIsImageFile,
+} from '@/utils'
+import { getView } from '@/utils/view'
+import { getSettings } from '@/stores/settings'
+import { globalStore } from '@/stores/global'
+import { statusesStore } from '@/stores/statuses'
+import { getMeta } from '@/stores/meta'
+import { useDocument } from '@/data/document'
+import { whatsappEnabled, callEnabled } from '@/composables/settings'
+import {
+  createResource,
+  FileUploader,
+  Dropdown,
+  Tooltip,
+  Avatar,
+  Tabs,
+  Breadcrumbs,
+  call,
+  usePageMeta,
+  toast,
+  Input,
+} from 'frappe-ui'
+import { ref, computed, watch, nextTick } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import { useActiveTabManager } from '@/composables/useActiveTabManager'
+
+const { brand } = getSettings()
+const { $dialog, $socket, makeCall } = globalStore()
+const { statusOptions: getStatusOptions, getPipelineStatus } = statusesStore()
+const { doctypeMeta } = getMeta('CRM Pipeline')
 
 const route = useRoute()
 const router = useRouter()
 
-const pipeline = ref({})
-const pipelineStatuses = ref([])
-const loading = ref(false)
-const converting = ref(false)
-const showStatusDropdown = ref(false)
-const changingStatus = ref(false)
-const statusDropdown = ref(null)
+const props = defineProps({
+  pipelineId: {
+    type: String,
+    required: true,
+  },
+})
 
-// Fetch pipeline statuses
-async function fetchPipelineStatuses() {
+const reload = ref(false)
+const activities = ref(null)
+const errorTitle = ref('')
+const errorMessage = ref('')
+const showDeleteLinkedDocModal = ref(false)
+const showConvertToDealModal = ref(false)
+const showFilesUploader = ref(false)
+
+// Local state for deals and logs
+const localDeals = ref([])
+const localLogs = ref([])
+const hasChanges = ref(false)
+
+const { triggerOnChange, assignees, document, scripts, error } = useDocument(
+  'CRM Pipeline',
+  props.pipelineId,
+)
+
+const doc = computed(() => document.doc || {})
+
+// Watch for document changes to initialize local state
+watch(doc, (newDoc) => {
+  if (newDoc) {
+    // Initialize deals
+    localDeals.value = newDoc.deals ? JSON.parse(JSON.stringify(newDoc.deals)) : []
+    
+    // Initialize logs
+    localLogs.value = newDoc.logs ? JSON.parse(JSON.stringify(newDoc.logs)) : []
+    
+    // Reset changes flag
+    hasChanges.value = false
+  }
+}, { immediate: true, deep: true })
+
+// Watch for any changes in local state
+watch([localDeals, localLogs], ([newDeals, newLogs], [oldDeals, oldLogs]) => {
+  checkForChanges()
+}, { deep: true })
+
+// Status options for dropdown
+const statusOptions = computed(() => {
+  return getStatusOptions('pipeline').map(status => ({
+    ...status,
+    onClick: () => changePipelineStatus(status.value)
+  }))
+})
+
+// Current active tab
+const currentTab = computed(() => tabs.value[tabIndex.value])
+
+// Tabs configuration with new tabs
+const tabs = computed(() => {
+  let tabOptions = [
+    {
+      name: 'Activity',
+      label: __('Activity'),
+      icon: ActivityIcon,
+    },
+    {
+      name: 'DealTagging',
+      label: __('Deal Tagging'),
+      icon: DetailsIcon,
+    },
+    {
+      name: 'Logs',
+      label: __('Status Logs'),
+      icon: ActivityIcon,
+    },
+    {
+      name: 'Emails',
+      label: __('Emails'),
+      icon: EmailIcon,
+    },
+    {
+      name: 'Comments',
+      label: __('Comments'),
+      icon: CommentIcon,
+    },
+    {
+      name: 'Data',
+      label: __('Data'),
+      icon: DetailsIcon,
+    },
+    {
+      name: 'Calls',
+      label: __('Calls'),
+      icon: PhoneIcon,
+    },
+    {
+      name: 'Tasks',
+      label: __('Tasks'),
+      icon: TaskIcon,
+    },
+    {
+      name: 'Notes',
+      label: __('Notes'),
+      icon: NoteIcon,
+    },
+    {
+      name: 'Attachments',
+      label: __('Attachments'),
+      icon: AttachmentIcon,
+    },
+    {
+      name: 'WhatsApp',
+      label: __('WhatsApp'),
+      icon: WhatsAppIcon,
+      condition: () => whatsappEnabled.value,
+    },
+  ]
+  return tabOptions.filter((tab) => (tab.condition ? tab.condition() : true))
+})
+
+// Check if there are any changes
+function checkForChanges() {
+  const originalDeals = doc.value.deals ? JSON.parse(JSON.stringify(doc.value.deals)) : []
+  const originalLogs = doc.value.logs ? JSON.parse(JSON.stringify(doc.value.logs)) : []
+  
+  const dealsChanged = JSON.stringify(localDeals.value) !== JSON.stringify(originalDeals)
+  const logsChanged = JSON.stringify(localLogs.value) !== JSON.stringify(originalLogs)
+  
+  hasChanges.value = dealsChanged || logsChanged
+}
+
+// Deal Tagging Functions
+function removeDealRow(index) {
+  localDeals.value.splice(index, 1)
+}
+
+// Add this function to your script section
+function formatDate(dateString) {
+  if (!dateString) return ''
+  
   try {
-    const result = await call('frappe.client.get_list', {
-      doctype: 'CRM Pipeline Status',
-      fields: ['name'],
-      order_by: 'creation asc'
-    })
-    pipelineStatuses.value = result.map(status => status.name)
+    const date = new Date(dateString)
+    if (isNaN(date.getTime())) return dateString
+    
+    // Use browser's locale for formatting
+    return date.toLocaleString()
   } catch (error) {
-    console.error('Error fetching pipeline statuses:', error)
-    // Fallback to common statuses
-    pipelineStatuses.value = [
-      'Draft',
-      'Active', 
-      'In Progress',
-      'On Hold',
-      'Completed',
-      'Lost',
-      'Cancelled',
-      'Open'
-    ]
+    return dateString
   }
 }
 
-// Fetch pipeline details
-async function fetchPipeline() {
-  loading.value = true
+function onDealsChange() {
+  // Changes are automatically detected by the watcher
+}
+
+// Logs Functions
+function removeLogRow(index) {
+  localLogs.value.splice(index, 1)
+}
+
+function onLogsChange() {
+  // Changes are automatically detected by the watcher
+}
+
+// Status Change Function
+async function changePipelineStatus(newStatus) {
   try {
-    const result = await call('frappe.client.get', {
-      doctype: 'CRM Pipeline',
-      name: route.params.pipelineId
-    })
-    pipeline.value = result
-  } catch (error) {
-    console.error('Error fetching pipeline:', error)
-    toast.error('Failed to load pipeline details')
-  } finally {
-    loading.value = false
-  }
-}
-
-// Toggle status dropdown
-function toggleStatusDropdown() {
-  showStatusDropdown.value = !showStatusDropdown.value
-}
-
-// Change pipeline status
-async function changeStatus(newStatus) {
-  if (newStatus === pipeline.value.status) {
-    showStatusDropdown.value = false
-    return
-  }
-
-  changingStatus.value = true
-  try {
-    // Call the API to update pipeline status
     await call('crm_pipeline.api.update_pipeline_status', {
-      pipeline_name: pipeline.value.name,
+      pipeline_name: props.pipelineId,
       new_status: newStatus
     })
-    
-    toast.success(`Pipeline status changed to ${newStatus}`)
-    showStatusDropdown.value = false
-    
-    // Refresh pipeline data to get updated status and logs
-    await fetchPipeline()
-    
+    toast.success(__('Status updated successfully'))
+    document.reload()
   } catch (error) {
-    console.error('Error changing pipeline status:', error)
-    toast.error('Failed to change pipeline status')
-  } finally {
-    changingStatus.value = false
+    toast.error(__('Failed to update status: {0}', [error.message]))
   }
 }
 
-// Convert pipeline to deal
-async function convertToDeal() {
-  converting.value = true
+// Save all changes
+async function saveAllChanges() {
   try {
-    await call('crm_pipeline.api.create_deal_from_pipeline', {
-      pipeline_name: pipeline.value.name
-    })
+    // Update deals
+    doc.value.deals = localDeals.value
     
-    toast.success('Pipeline converted to deal successfully')
-    await fetchPipeline()
+    // Update logs
+    doc.value.logs = localLogs.value
     
+    // Save the document
+    await document.save.submit()
+    
+    hasChanges.value = false
+    toast.success(__('Changes saved successfully'))
   } catch (error) {
-    console.error('Error converting pipeline:', error)
-    toast.error('Failed to convert pipeline to deal')
-  } finally {
-    converting.value = false
+    toast.error(__('Failed to save changes: {0}', [error.message]))
   }
 }
 
-// Calculate total deal value from all deals
-function calculateTotalDealValue() {
-  if (!pipeline.value.deals || !pipeline.value.deals.length) return 0
-  return pipeline.value.deals.reduce((total, deal) => total + (deal.deal_value || 0), 0)
-}
+// Existing functions (keep all your existing functions below)
+const { tabIndex, changeTabTo } = useActiveTabManager(tabs, 'lastPipelineTab')
 
-// Sort logs by from_date (newest first)
-const sortedLogs = computed(() => {
-  if (!pipeline.value.logs) return []
-  return [...pipeline.value.logs].sort((a, b) => new Date(b.from_date) - new Date(a.from_date))
+const sections = createResource({
+  url: 'crm.fcrm.doctype.crm_fields_layout.crm_fields_layout.get_sidepanel_sections',
+  cache: ['sidePanelSections', 'CRM Pipeline'],
+  params: { doctype: 'CRM Pipeline' },
+  auto: true,
 })
 
-// Format duration
-function formatDuration(duration) {
-  if (!duration || duration === '0.000000000') return '—'
-  const seconds = parseFloat(duration)
-  if (seconds < 60) return `${seconds.toFixed(1)}s`
-  else if (seconds < 3600) return `${(seconds / 60).toFixed(1)}m`
-  else if (seconds < 86400) return `${(seconds / 3600).toFixed(1)}h`
-  else return `${(seconds / 86400).toFixed(1)}d`
-}
+const breadcrumbs = computed(() => {
+  let items = [{ label: __('Pipelines'), route: { name: 'Pipelines' } }]
 
-// Close dropdown when clicking outside
-function handleClickOutside(event) {
-  if (statusDropdown.value && !statusDropdown.value.contains(event.target)) {
-    showStatusDropdown.value = false
+  if (route.query.view || route.query.viewType) {
+    let view = getView(route.query.view, route.query.viewType, 'CRM Pipeline')
+    if (view) {
+      items.push({
+        label: __(view.label),
+        icon: view.icon,
+        route: {
+          name: 'Pipelines',
+          params: { viewType: route.query.viewType },
+          query: { view: route.query.view },
+        },
+      })
+    }
   }
-}
 
-// Helper functions
-function getInitials(name) {
-  if (!name) return '—'
-  return name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2)
-}
+  items.push({
+    label: title.value,
+    route: { name: 'Pipeline', params: { pipelineId: props.pipelineId } },
+  })
+  return items
+})
 
-function getStatusClasses(status) {
-  const classes = {
-    'Active': 'bg-green-100 text-green-800',
-    'In Progress': 'bg-blue-100 text-blue-800',
-    'Completed': 'bg-purple-100 text-purple-800',
-    'Lost': 'bg-red-100 text-red-800',
-    'Draft': 'bg-gray-100 text-gray-800',
-    'On Hold': 'bg-yellow-100 text-yellow-800',
-    'Cancelled': 'bg-gray-100 text-gray-800',
-    'Open': 'bg-blue-100 text-blue-800'
+const title = computed(() => {
+  let t = doctypeMeta['CRM Pipeline']?.title_field || 'name'
+  return doc.value?.[t] || props.pipelineId
+})
+
+usePageMeta(() => {
+  return { title: title.value, icon: brand.favicon }
+})
+
+watch(error, (err) => {
+  if (err) {
+    errorTitle.value = __(
+      err.exc_type == 'DoesNotExistError'
+        ? 'Document not found'
+        : 'Error occurred',
+    )
+    errorMessage.value = __(err.messages?.[0] || 'An error occurred')
+  } else {
+    errorTitle.value = ''
+    errorMessage.value = ''
   }
-  return classes[status] || 'bg-gray-100 text-gray-800'
+})
+
+watch(
+  () => document.doc,
+  async (_doc) => {
+    if (scripts.data?.length) {
+      let s = await setupCustomizations(scripts.data, {
+        doc: _doc,
+        $dialog,
+        $socket,
+        router,
+        toast,
+        updateField,
+        createToast: toast.create,
+        deleteDoc: deletePipeline,
+        call,
+      })
+      document._actions = s.actions || []
+      document._statuses = s.statuses || []
+    }
+  },
+  { once: true },
+)
+
+async function triggerStatusChange(value) {
+  await triggerOnChange('status', value)
+  document.save.submit()
 }
 
-function formatCurrency(amount) {
-  if (!amount) return '$0'
-  const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0
-  }).format(numAmount)
-}
+function updateField(name, value) {
+  value = Array.isArray(name) ? '' : value
+  let oldValues = Array.isArray(name) ? {} : doc.value[name]
 
-function formatDate(dateString) {
-  if (!dateString) return '—'
-  const date = new Date(dateString)
-  return date.toLocaleDateString('en-US', { 
-    month: 'short', 
-    day: 'numeric',
-    year: 'numeric'
+  if (Array.isArray(name)) {
+    name.forEach((field) => (doc.value[field] = value))
+  } else {
+    doc.value[name] = value
+  }
+
+  document.save.submit(null, {
+    onSuccess: () => (reload.value = true),
+    onError: (err) => {
+      if (Array.isArray(name)) {
+        name.forEach((field) => (doc.value[field] = oldValues[field]))
+      } else {
+        doc.value[name] = oldValues
+      }
+      toast.error(err.messages?.[0] || __('Error updating field'))
+    },
   })
 }
 
-function formatDateTime(dateString) {
-  if (!dateString) return '—'
-  const date = new Date(dateString)
-  return date.toLocaleDateString('en-US', { 
-    month: 'short', 
-    day: 'numeric',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
+function deletePipeline() {
+  showDeleteLinkedDocModal.value = true
+}
+
+function openEmailBox() {
+  let currentTab = tabs.value[tabIndex.value]
+  if (!['Emails', 'Comments', 'Activities'].includes(currentTab.name)) {
+    activities.value.changeTabTo('emails')
+  }
+  nextTick(() => (activities.value.emailBox.show = true))
+}
+
+function saveChanges(data) {
+  document.save.submit(null, {
+    onSuccess: () => reloadAssignees(data),
   })
 }
 
-// Lifecycle
-onMounted(() => {
-  fetchPipelineStatuses()
-  fetchPipeline()
-  document.addEventListener('click', handleClickOutside)
-})
-
-onUnmounted(() => {
-  document.removeEventListener('click', handleClickOutside)
-})
+function reloadAssignees(data) {
+  if (data?.hasOwnProperty('pipeline_owner')) {
+    assignees.reload()
+  }
+}
 </script>
-
-<style scoped>
-/* Custom styles */
-.hover\:border-blue-300:hover {
-  border-color: #93c5fd;
-}
-
-.transition-colors {
-  transition: all 0.15s ease-in-out;
-}
-
-/* Table styling */
-table {
-  border-collapse: separate;
-  border-spacing: 0;
-}
-
-th, td {
-  border-bottom: 1px solid #e5e7eb;
-}
-
-/* Sticky header */
-.sticky {
-  position: sticky;
-  z-index: 10;
-}
-</style>

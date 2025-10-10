@@ -35,6 +35,11 @@
         </template>
       </Dropdown>
       <Button
+        :label="__('Convert to Lead')"
+        variant="solid"
+        @click="createLead"
+      />
+      <Button
         :label="__('Convert to Pipeline')"
         variant="solid"
         @click="createPipeline"

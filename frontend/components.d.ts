@@ -8,6 +8,8 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    ' ConvertPipelineToLeadModal': typeof import('./src/components/Modals/ ConvertPipelineToLeadModal.vue')['default']
+    ' ConvertPipelineToModal': typeof import('./src/components/Modals/ ConvertPipelineToModal.vue')['default']
     AboutModal: typeof import('./src/components/Modals/AboutModal.vue')['default']
     Activities: typeof import('./src/components/Activities/Activities.vue')['default']
     ActivityHeader: typeof import('./src/components/Activities/ActivityHeader.vue')['default']
@@ -73,6 +75,7 @@ declare module 'vue' {
     ContactsIcon: typeof import('./src/components/Icons/ContactsIcon.vue')['default']
     ContactsListView: typeof import('./src/components/ListViews/ContactsListView.vue')['default']
     ConvertIcon: typeof import('./src/components/Icons/ConvertIcon.vue')['default']
+    ConvertPipelineToDealModal: typeof import('./src/components/Modals/ConvertPipelineToDealModal.vue')['default']
     ConvertToDealModal: typeof import('./src/components/Modals/ConvertToDealModal.vue')['default']
     CountUpTimer: typeof import('./src/components/CountUpTimer.vue')['default']
     CreateDocumentModal: typeof import('./src/components/Modals/CreateDocumentModal.vue')['default']
@@ -224,6 +227,8 @@ declare module 'vue' {
     PeopleIcon: typeof import('./src/components/Icons/PeopleIcon.vue')['default']
     PhoneIcon: typeof import('./src/components/Icons/PhoneIcon.vue')['default']
     PinIcon: typeof import('./src/components/Icons/PinIcon.vue')['default']
+    PipelineModal: typeof import('./src/components/Modals/PipelineModal.vue')['default']
+    PipelinesListView: typeof import('./src/components/ListViews/PipelinesListView.vue')['default']
     PlaybackSpeedIcon: typeof import('./src/components/Icons/PlaybackSpeedIcon.vue')['default']
     PlaybackSpeedOption: typeof import('./src/components/Activities/PlaybackSpeedOption.vue')['default']
     PlayIcon: typeof import('./src/components/Icons/PlayIcon.vue')['default']
