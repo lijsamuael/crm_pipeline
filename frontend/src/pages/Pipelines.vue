@@ -285,9 +285,9 @@ import { usersStore } from '@/stores/users'
 import { statusesStore } from '@/stores/statuses'
 import { callEnabled } from '@/composables/settings'
 import { formatDate, timeAgo, website, formatTime } from '@/utils'
-import { Avatar, Tooltip, Dropdown, call } from 'frappe-ui'
+import { Avatar, Tooltip, Dropdown } from 'frappe-ui'
 import { useRoute } from 'vue-router'
-import { ref, computed, reactive, h, watch, onMounted, nextTick } from 'vue'
+import { ref, computed, reactive, h, watch, onMounted } from 'vue'
 
 const { getFormattedPercent, getFormattedFloat, getFormattedCurrency } =
   getMeta('CRM Pipeline')
@@ -331,246 +331,53 @@ const triggerResize = ref(1)
 const updatedPageCount = ref(20)
 const viewControls = ref(null)
 
-// Column persistence
-const displayColumns = computed(() => {
-  return pipelines.value?.data?.columns || []
+// Column persistence - simple approach
+const savedColumns = ref(null)
+
+// Load saved columns on mount
+onMounted(() => {
+  const saved = localStorage.getItem('crm_pipeline_columns')
+  if (saved) {
+    try {
+      savedColumns.value = JSON.parse(saved)
+      console.log('Loaded saved columns from localStorage')
+    } catch (e) {
+      console.error('Error loading saved columns:', e)
+      savedColumns.value = null
+    }
+  }
 })
 
-// Debug: Log when columns change
-watch(() => pipelines.value?.data?.columns, (newColumns, oldColumns) => {
-  console.log('🔍 COLUMNS CHANGED:', {
-    newLength: newColumns?.length,
-    oldLength: oldColumns?.length,
-    newColumns: newColumns,
-    oldColumns: oldColumns
-  })
-}, { deep: true })
+// Use saved columns or API columns
+const displayColumns = computed(() => {
+  return savedColumns.value || pipelines.value?.data?.columns || []
+})
 
-// Save columns with debouncing
+// Save columns with debouncing to prevent loops
 let saveTimeout = null
 watch(() => pipelines.value?.data?.columns, (newColumns) => {
-  if (!newColumns || newColumns.length === 0) {
-    console.log('❌ No columns to save')
-    return
-  }
+  if (!newColumns || newColumns.length === 0) return
   
-  console.log('🔄 Columns changed, preparing to save...')
-  
-  // Debounce the save
+  // Debounce the save to prevent multiple rapid saves
   clearTimeout(saveTimeout)
   saveTimeout = setTimeout(() => {
-    saveColumnsToCustomView(newColumns)
-  }, 500)
+    // Convert to plain object and save
+    try {
+      const plainColumns = JSON.parse(JSON.stringify(newColumns))
+      const newColumnsStr = JSON.stringify(plainColumns)
+      const currentSavedStr = JSON.stringify(savedColumns.value)
+      
+      // Only save if columns actually changed
+      if (newColumnsStr !== currentSavedStr) {
+        savedColumns.value = plainColumns
+        localStorage.setItem('crm_pipeline_columns', newColumnsStr)
+        console.log('Columns saved successfully')
+      }
+    } catch (e) {
+      console.error('Error saving columns:', e)
+    }
+  }, 300) // 300ms debounce
 }, { deep: true })
-
-// Main function to save columns
-async function saveColumnsToCustomView(columns) {
-  console.log('💾 Starting column save process...')
-  console.log('📊 Columns to save:', columns)
-  
-  try {
-    // Get current view data from pipelines data
-    const pipelinesData = pipelines.value?.data
-    if (!pipelinesData) {
-      console.warn('❌ No pipelines data found')
-      return
-    }
-    
-    console.log('📋 Available pipelines data:', {
-      viewSettings: pipelinesData.view_settings,
-      viewType: pipelinesData.view_type,
-      columnsCount: pipelinesData.columns?.length,
-      rowsCount: pipelinesData.rows?.length
-    })
-    
-    // Get the current view name - this is CRITICAL
-    let viewName = 'standard'
-    if (route.query.view) {
-      viewName = route.query.view
-    } else if (pipelinesData.view_settings?.name) {
-      viewName = pipelinesData.view_settings.name
-    } else if (viewControls.value?.currentView?.name) {
-      viewName = viewControls.value.currentView.name
-    }
-    
-    console.log('🎯 Using view name:', viewName)
-    
-    // Prepare the view data for API
-    const viewData = {
-      doctype: 'CRM Pipeline',
-      name: viewName, // Use the actual view name
-      type: pipelinesData.view_type || 'list',
-      label: 'List',
-      route_name: 'Pipelines',
-      columns: JSON.parse(JSON.stringify(columns)), // Convert Proxy to plain array
-      rows: pipelinesData.rows || [
-        "name", "pipeline_name", "organization", "status", "pipeline_owner",
-        "est_pipeline_value", "total_deal_value", "email", "mobile_no", "lead", 
-        "lead_name", "source", "organization_name", "website", "territory",
-        "modified", "creation", "_assign", "__last_status"
-      ],
-      filters: pipelinesData.filters || {},
-      order_by: pipelinesData.order_by || 'modified desc',
-      group_by_field: pipelinesData.group_by_field || 'owner',
-      column_field: pipelinesData.column_field || 'status',
-      title_field: pipelinesData.title_field || '',
-      kanban_columns: pipelinesData.kanban_columns || '[]',
-      kanban_fields: pipelinesData.kanban_fields || '[]',
-      load_default_columns: false,
-      pinned: false,
-      public: false
-    }
-    
-    console.log('📤 Sending to custom API:', {
-      name: viewData.name,
-      type: viewData.type,
-      columnsCount: viewData.columns.length,
-      rowsCount: viewData.rows.length
-    })
-    
-    // Call your custom method
-    const result = await call('crm_pipeline.api.create_or_update_standard_view', {
-      view: viewData
-    })
-    
-    console.log('📥 API Response:', result)
-    
-    if (result.message) {
-      console.log('✅ Columns saved successfully via custom method!')
-      console.log('✅ View updated:', result.message.name)
-      console.log('✅ Saved columns count:', result.message.columns?.length || 0)
-      
-      // Debug: Check what was actually saved
-      const debugResult = await call('crm_pipeline.api.get_crm_pipeline_view_settings', {
-        view_name: viewData.name,
-        view_type: viewData.type
-      })
-      
-      console.log('🔍 DEBUG - What was saved:', debugResult.message)
-      
-      // Show success message
-      if (typeof frappe !== 'undefined' && frappe.show_alert) {
-        frappe.show_alert({
-          message: __('Column settings saved successfully'),
-          indicator: 'green'
-        })
-      }
-      
-      // IMPORTANT: Force a complete reload instead of just refresh
-      setTimeout(() => {
-        console.log('🔄 Performing complete reload...')
-        // Force a hard reload of the view
-        if (viewControls.value && viewControls.value.reload) {
-          viewControls.value.reload()
-        }
-        // Also reload the pipelines data
-        if (pipelines.value && pipelines.value.reload) {
-          pipelines.value.reload()
-        }
-      }, 1000)
-      
-    } else if (result.exc) {
-      console.error('❌ API Error:', result.exc)
-    }
-    
-  } catch (error) {
-    console.error('❌ Error saving columns:', error)
-  }
-}
-
-// Enhanced monkey patching that works with ViewControls internals
-onMounted(() => {
-  console.log('🚀 Pipelines.vue mounted, setting up column saving...')
-  
-  // Wait for ViewControls to be fully loaded
-  nextTick(() => {
-    if (viewControls.value) {
-      console.log('✅ ViewControls component found')
-      
-      // Store original methods if they exist
-      const originalUpdateColumns = viewControls.value.updateColumns
-      const originalCreateOrUpdate = viewControls.value.createOrUpdateStandardView
-      
-      console.log('🔧 Available ViewControls methods:', {
-        hasUpdateColumns: !!originalUpdateColumns,
-        hasCreateOrUpdate: !!originalCreateOrUpdate,
-        hasReload: !!viewControls.value.reload
-      })
-      
-      // Override updateColumns method if it exists
-      if (originalUpdateColumns) {
-        viewControls.value.updateColumns = function(obj) {
-          console.log('🎯 Intercepted updateColumns call:', {
-            isDefault: obj?.isDefault,
-            reset: obj?.reset,
-            reload: obj?.reload
-          })
-          
-          // Call original method first
-          const result = originalUpdateColumns.call(this, obj)
-          
-          // If this is a column update (not reset), save via our custom method
-          if (obj && !obj.isDefault && !obj.reset) {
-            console.log('💫 Column update detected, saving via custom method...')
-            setTimeout(() => {
-              if (this.list?.data?.columns) {
-                saveColumnsToCustomView(this.list.data.columns)
-              } else if (pipelines.value?.data?.columns) {
-                saveColumnsToCustomView(pipelines.value.data.columns)
-              }
-            }, 100)
-          }
-          
-          return result
-        }
-        console.log('✅ Successfully patched updateColumns method')
-      }
-      
-      // Override createOrUpdateStandardView method if it exists
-      if (originalCreateOrUpdate) {
-        viewControls.value.createOrUpdateStandardView = function() {
-          console.log('🎯 Intercepted createOrUpdateStandardView call')
-          
-          // For CRM Pipeline, use our custom method
-          if (this.doctype === 'CRM Pipeline') {
-            console.log('💫 Using custom method for CRM Pipeline')
-            if (this.list?.data?.columns) {
-              return saveColumnsToCustomView(this.list.data.columns)
-            } else if (pipelines.value?.data?.columns) {
-              return saveColumnsToCustomView(pipelines.value.data.columns)
-            }
-          } else {
-            // For other doctypes, use original method
-            console.log('📝 Using original method for other doctype:', this.doctype)
-            return originalCreateOrUpdate.call(this)
-          }
-        }
-        console.log('✅ Successfully patched createOrUpdateStandardView method')
-      }
-      
-      // If methods don't exist, use direct approach
-      if (!originalUpdateColumns && !originalCreateOrUpdate) {
-        console.log('🔧 Using direct column watching approach')
-        // We'll rely on the column watch above
-      }
-      
-    } else {
-      console.warn('❌ ViewControls component not found')
-    }
-  })
-})
-
-// Also watch for pipelines data to be loaded
-watch(() => pipelines.value?.data, (newData) => {
-  if (newData) {
-    console.log('📊 Pipelines data loaded:', {
-      hasViewSettings: !!newData.view_settings,
-      viewType: newData.view_type,
-      columnsCount: newData.columns?.length,
-      rowsCount: newData.rows?.length
-    })
-  }
-}, { immediate: true })
 
 function getRow(name, field) {
   function getValue(value) {
