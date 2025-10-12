@@ -123,12 +123,7 @@ export default defineConfig({
     }),
     virtualStubPlugin,
   ],
-resolve: {
-  alias: {
-    '@': path.resolve(__dirname, './src'),
-    '@/utils': path.resolve(__dirname, './src/utils/index.js'), // 👈 force resolve
-  },
-},
+  resolve: { alias },
   build: {
     outDir: '../crm_pipeline/public/frontend',
     emptyOutDir: true,
