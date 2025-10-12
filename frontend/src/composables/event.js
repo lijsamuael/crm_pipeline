@@ -1,6 +1,6 @@
 import { usersStore } from '@/stores/users'
 import { dayjs, createListResource } from 'frappe-ui'
-import { sameArrayContents } from '@/utils'
+import { sameArrayContents } from '@/utils/index.js'
 import { computed, ref } from 'vue'
 import { allTimeSlots } from '@/components/Calendar/utils'
 
