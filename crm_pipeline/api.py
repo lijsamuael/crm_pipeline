@@ -300,3 +300,116 @@ def convert_to_deal(pipeline, deal=None, existing_contact=None, existing_organiz
         print(f"🔄 Database changes rolled back due to error")
         frappe.log_error(f"Error converting pipeline to deal: {str(e)}")
         frappe.throw(_("Error converting pipeline to deal: {0}").format(str(e)))
+        
+        
+        
+        
+@frappe.whitelist()
+def get_data(doctype, filters=None, order_by=None, **kwargs):
+    """
+    Override the default get_data API for CRM Pipeline
+    """
+    
+    # Only handle CRM Pipeline, pass everything else through
+    if doctype != "CRM Pipeline":
+        from crm.api.doc import get_data as original_get_data
+        
+        # Prepare parameters for the original function, excluding 'cmd'
+        original_kwargs = {k: v for k, v in kwargs.items() if k != 'cmd'}
+        return original_get_data(doctype, filters, order_by, **original_kwargs)
+    
+    # CRM Pipeline specific handling
+    try:
+        # Get all relevant fields from your doctype
+        fields = [
+            "name", "pipeline_name", "organization", "status", 
+            "pipeline_owner", "est_pipeline_value", "total_deal_value",
+            "email", "mobile_no", "lead", "lead_name", "source",
+            "organization_name", "website", "territory", "modified",
+            "creation", "_assign"
+        ]
+        
+        # Parse filters
+        if isinstance(filters, str):
+            filters = frappe.parse_json(filters)
+        elif filters is None:
+            filters = {}
+            
+        # Set default order_by
+        if not order_by:
+            order_by = 'modified desc'
+            
+        # Get pagination parameters (filter out 'cmd')
+        safe_kwargs = {k: v for k, v in kwargs.items() if k != 'cmd'}
+        page_length = int(safe_kwargs.get('page_length', 20))
+        page_length_count = int(safe_kwargs.get('page_length_count', 20))
+        
+        # Get view parameters
+        view = safe_kwargs.get('view', {})
+        if isinstance(view, str):
+            view = frappe.parse_json(view)
+        view_type = view.get('view_type', 'list')
+        
+        # Get the actual data
+        data = frappe.get_all(
+            doctype,
+            fields=fields,
+            filters=filters,
+            order_by=order_by,
+            limit_page_length=page_length
+        )
+        
+        # Get total count for pagination
+        total_count = frappe.db.count(doctype, filters)
+        
+        # Get field metadata for column selection
+        meta = frappe.get_meta(doctype)
+        all_fields = []
+        for field in meta.fields:
+            if field.fieldtype not in ['Section Break', 'Column Break', 'Tab Break']:
+                all_fields.append({
+                    "label": field.label,
+                    "value": field.fieldname,
+                    "type": field.fieldtype,
+                    "options": field.options
+                })
+        
+        # Get columns and rows
+        columns = [
+            {"label": "Pipeline Name", "type": "Data", "key": "pipeline_name", "width": "12rem"},
+            {"label": "Organization", "type": "Link", "key": "organization", "options": "CRM Organization", "width": "10rem"},
+            {"label": "Status", "type": "Link", "key": "status", "options": "CRM Pipeline Status", "width": "8rem"},
+            {"label": "Pipeline Owner", "type": "Link", "key": "pipeline_owner", "options": "User", "width": "10rem"},
+            {"label": "Est Pipeline Value", "type": "Data", "key": "est_pipeline_value", "width": "10rem"},
+            {"label": "Email", "type": "Data", "key": "email", "width": "12rem"},
+            {"label": "Mobile No", "type": "Data", "key": "mobile_no", "width": "11rem"},
+            {"label": "Last Modified", "type": "Datetime", "key": "modified", "width": "8rem"},
+        ]
+        
+        rows = fields
+        
+        return {
+            "columns": columns,
+            "rows": rows,
+            "total_count": total_count,
+            "row_count": len(data),
+            "data": data,
+            "page_length": page_length,
+            "page_length_count": page_length_count,
+            "view_type": view_type,
+            "fields": all_fields  # Add this for column selection
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Error in CRM Pipeline get_data: {str(e)}")
+        # Return minimal fallback structure
+        return {
+            "columns": [],
+            "rows": [],
+            "total_count": 0,
+            "row_count": 0,
+            "data": [],
+            "page_length": 20,
+            "page_length_count": 20,
+            "fields": []  # Empty fields array as fallback
+        }
