@@ -75,12 +75,27 @@ const isPipelineCreating = ref(false)
 
 const { document: pipeline, triggerOnBeforeCreate } = useDocument('CRM Pipeline')
 
+// Get pipeline statuses
 const pipelineStatuses = computed(() => {
-  let statuses = statusOptions('pipeline')
-  if (!pipeline.doc.status) {
-    pipeline.doc.status = statuses?.[0]?.value
+  try {
+    let statuses = statusOptions('pipeline') || []
+    if (statuses.length === 0) {
+      // Fallback statuses if none are defined
+      statuses = [
+        { value: 'Open', label: 'Open' },
+        { value: 'In Progress', label: 'In Progress' },
+        { value: 'Completed', label: 'Completed' }
+      ]
+    }
+    return statuses
+  } catch (error) {
+    console.warn('Error getting pipeline statuses:', error)
+    return [
+      { value: 'Open', label: 'Open' },
+      { value: 'In Progress', label: 'In Progress' },
+      { value: 'Completed', label: 'Completed' }
+    ]
   }
-  return statuses
 })
 
 const tabs = createResource({
@@ -88,96 +103,147 @@ const tabs = createResource({
   cache: ['QuickEntry', 'CRM Pipeline'],
   params: { doctype: 'CRM Pipeline', type: 'Quick Entry' },
   auto: true,
-  transform: (_tabs) => {
-    return _tabs.forEach((tab) => {
-      tab.sections.forEach((section) => {
-        section.columns.forEach((column) => {
-          column.fields.forEach((field) => {
-            if (field.fieldname == 'status') {
-              field.fieldtype = 'Select'
-              field.options = pipelineStatuses.value
-              field.prefix = getPipelineStatus(pipeline.doc.status).color
-            }
-
-            if (field.fieldtype === 'Table') {
-              pipeline.doc[field.fieldname] = []
-            }
-          })
+  transform: (tabs) => {
+    if (!tabs || !Array.isArray(tabs)) return tabs
+    
+    return tabs.map((tab) => {
+      if (!tab.sections) return tab
+      
+      return {
+        ...tab,
+        sections: tab.sections.map((section) => {
+          if (!section.columns) return section
+          
+          return {
+            ...section,
+            columns: section.columns.map((column) => {
+              if (!column.fields) return column
+              
+              return {
+                ...column,
+                fields: column.fields.map((field) => {
+                  // Handle status field
+                  if (field.fieldname === 'status') {
+                    return {
+                      ...field,
+                      fieldtype: 'Select',
+                      options: pipelineStatuses.value,
+                      prefix: pipeline.doc.status ? getPipelineStatus(pipeline.doc.status)?.color : 'gray'
+                    }
+                  }
+                  
+                  // Handle table fields
+                  if (field.fieldtype === 'Table' && !pipeline.doc[field.fieldname]) {
+                    pipeline.doc[field.fieldname] = []
+                  }
+                  
+                  return field
+                })
+              }
+            })
+          }
         })
-      })
+      }
     })
-  },
+  }
 })
 
 const createPipeline = createResource({
   url: 'frappe.client.insert',
+  makeParams: (params) => params
 })
 
 async function createNewPipeline() {
+  // Reset error
+  error.value = null
+  
+  // Validate required fields
+  if (!pipeline.doc.pipeline_name) {
+    error.value = __('Pipeline Name is mandatory')
+    return
+  }
+  
+  if (!pipeline.doc.status) {
+    error.value = __('Status is required')
+    return
+  }
+
+  // Validate email if provided
+  if (pipeline.doc.email && !isValidEmail(pipeline.doc.email)) {
+    error.value = __('Invalid Email')
+    return
+  }
+
+  // Validate website format
   if (pipeline.doc.website && !pipeline.doc.website.startsWith('http')) {
     pipeline.doc.website = 'https://' + pipeline.doc.website
   }
 
+  // Validate numeric fields
+  if (pipeline.doc.annual_revenue) {
+    const revenue = parseFloat(pipeline.doc.annual_revenue.toString().replace(/,/g, ''))
+    if (isNaN(revenue)) {
+      error.value = __('Annual Revenue should be a number')
+      return
+    }
+    pipeline.doc.annual_revenue = revenue
+  }
+
+  // Validate mobile number
+  if (pipeline.doc.mobile_no && !isValidPhoneNumber(pipeline.doc.mobile_no)) {
+    error.value = __('Mobile No should be a valid number')
+    return
+  }
+
+  // Trigger any before-create hooks
   await triggerOnBeforeCreate?.()
 
-  createPipeline.submit(
-    {
+  isPipelineCreating.value = true
+
+  try {
+    const result = await createPipeline.submit({
       doc: {
         doctype: 'CRM Pipeline',
         ...pipeline.doc,
-      },
-    },
-    {
-      validate() {
-        error.value = null
-        if (!pipeline.doc.pipeline_name) {
-          error.value = __('Pipeline Name is mandatory')
-          return error.value
-        }
-        if (pipeline.doc.annual_revenue) {
-          if (typeof pipeline.doc.annual_revenue === 'string') {
-            pipeline.doc.annual_revenue = pipeline.doc.annual_revenue.replace(/,/g, '')
-          } else if (isNaN(pipeline.doc.annual_revenue)) {
-            error.value = __('Annual Revenue should be a number')
-            return error.value
-          }
-        }
-        if (
-          pipeline.doc.mobile_no &&
-          isNaN(pipeline.doc.mobile_no.replace(/[-+() ]/g, ''))
-        ) {
-          error.value = __('Mobile No should be a number')
-          return error.value
-        }
-        if (pipeline.doc.email && !pipeline.doc.email.includes('@')) {
-          error.value = __('Invalid Email')
-          return error.value
-        }
-        if (!pipeline.doc.status) {
-          error.value = __('Status is required')
-          return error.value
-        }
-        isPipelineCreating.value = true
-      },
-      onSuccess(data) {
-        capture('pipeline_created')
-        isPipelineCreating.value = false
-        show.value = false
-        router.push({ name: 'Pipeline', params: { pipelineId: data.name } })
-        updateOnboardingStep('create_first_pipeline', true, false, () => {
-          localStorage.setItem('firstPipeline' + user, data.name)
-        })
-      },
-      onError(err) {
-        isPipelineCreating.value = false
-        if (!err.messages) {
-          error.value = err.message
-          return
-        }
-        error.value = err.messages.join('\n')
-      },
-    },
-  )
+      }
+    })
+
+    capture('pipeline_created')
+    isPipelineCreating.value = false
+    show.value = false
+    
+    // Navigate to the new pipeline
+    router.push({ name: 'Pipeline', params: { pipelineId: result.name } })
+    
+    // Update onboarding
+    updateOnboardingStep('create_first_pipeline', true, false, () => {
+      localStorage.setItem('firstPipeline' + user, result.name)
+    })
+    
+  } catch (err) {
+    isPipelineCreating.value = false
+    console.error('Error creating pipeline:', err)
+    
+    if (err.messages) {
+      error.value = err.messages.join('\n')
+    } else if (err.message) {
+      error.value = err.message
+    } else {
+      error.value = __('Failed to create pipeline. Please try again.')
+    }
+  }
+}
+
+// Helper functions for validation
+function isValidEmail(email) {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  return emailRegex.test(email)
+}
+
+function isValidPhoneNumber(phone) {
+  // Basic phone validation - allows numbers, spaces, hyphens, parentheses, and +
+  const phoneRegex = /^[\d\s\-+()]+$/
+  return phoneRegex.test(phone)
 }
 
 function openQuickEntryModal() {
@@ -187,12 +253,21 @@ function openQuickEntryModal() {
 }
 
 onMounted(() => {
-  pipeline.doc = { no_of_employees: '1-10' }
+  // Initialize pipeline with default values
+  pipeline.doc = { 
+    no_of_employees: '1-10',
+    status: pipelineStatuses.value[0]?.value || 'Open'
+  }
+  
+  // Apply any provided defaults
   Object.assign(pipeline.doc, props.defaults)
 
+  // Set default pipeline owner
   if (!pipeline.doc?.pipeline_owner) {
     pipeline.doc.pipeline_owner = getUser().name
   }
+  
+  // Ensure status is set
   if (!pipeline.doc?.status && pipelineStatuses.value[0]?.value) {
     pipeline.doc.status = pipelineStatuses.value[0].value
   }
