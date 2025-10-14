@@ -1,0 +1,71 @@
+[
+ {
+  "__last_status": null,
+  "currency": null,
+  "deals": [
+   {
+    "deal": "CRM-DEAL-2025-00050",
+    "deal_owner": "lijsamuael@gmail.com",
+    "deal_value": 50.0,
+    "est_qoutation_sales": 0.0,
+    "expected_deal_value": "0",
+    "parent": "CRM-PIPELINE-2025-00034",
+    "parentfield": "deals",
+    "parenttype": "CRM Pipeline",
+    "probablity": 10.0
+   }
+  ],
+  "docstatus": 0,
+  "doctype": "CRM Pipeline",
+  "email": null,
+  "est_pipeline_value": null,
+  "exchange_rate": 1.0,
+  "lead": "CRM-LEAD-2025-00005",
+  "lead_name": "Friends Software",
+  "logs": [
+   {
+    "duration": "12m 56s",
+    "from_date": "2025-10-13 15:35:51.320752",
+    "from_status": "Open",
+    "from_type": null,
+    "last_status_change_log": null,
+    "log_owner": null,
+    "parent": "CRM-PIPELINE-2025-00034",
+    "parentfield": "logs",
+    "parenttype": "CRM Pipeline",
+    "to_date": "2025-10-13 15:48:47.542609",
+    "to_status": "Ongoing",
+    "to_type": null
+   },
+   {
+    "duration": "0s",
+    "from_date": "2025-10-13 15:48:47.543286",
+    "from_status": "Ongoing",
+    "from_type": null,
+    "last_status_change_log": null,
+    "log_owner": null,
+    "parent": "CRM-PIPELINE-2025-00034",
+    "parentfield": "logs",
+    "parenttype": "CRM Pipeline",
+    "to_date": null,
+    "to_status": "",
+    "to_type": null
+   }
+  ],
+  "mobile_no": null,
+  "modified": "2025-10-13 15:56:48.132993",
+  "name": "CRM-PIPELINE-2025-00034",
+  "naming_series": "CRM-PIPELINE-.YYYY.-",
+  "no_of_employees": 0,
+  "organization": "Samuael Ketema",
+  "organization_name": "Samuael Ketema",
+  "organization_owner": null,
+  "pipeline_name": "Friends Software",
+  "pipeline_owner": "lijsamuael@gmail.com",
+  "source": null,
+  "status": "Ongoing",
+  "territory": null,
+  "total_deal_value": null,
+  "website": null
+ }
+]

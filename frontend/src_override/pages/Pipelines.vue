@@ -240,11 +240,150 @@
       />
     </div>
   </div>
-  <PipelineModal
-    v-if="showPipelineModal"
-    v-model="showPipelineModal"
-    :defaults="defaults"
+
+  <!-- Success Toast -->
+  <Toast
+    v-if="showSuccessToast"
+    :title="successMessage"
+    @close="showSuccessToast = false"
   />
+
+  <!-- Inline Pipeline Modal -->
+  <Dialog v-model="showPipelineModal" :options="{ size: '3xl' }">
+    <template #body>
+      <div class="bg-surface-modal px-4 pb-6 pt-5 sm:px-6">
+        <div class="mb-5 flex items-center justify-between">
+          <div>
+            <h3 class="text-2xl font-semibold leading-6 text-ink-gray-9">
+              {{ __('Create Pipeline') }}
+            </h3>
+          </div>
+          <div class="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              class="w-7"
+              @click="showPipelineModal = false"
+              icon="x"
+            />
+          </div>
+        </div>
+        <div>
+          <!-- Form Fields -->
+          <div class="space-y-4">
+            <!-- Pipeline Name -->
+            <div>
+              <label class="text-sm font-medium text-ink-gray-7">
+                {{ __('Pipeline Name') }} <span class="text-red-500">*</span>
+              </label>
+              <Input
+                v-model="newPipeline.pipeline_name"
+                type="text"
+                class="mt-1"
+                :placeholder="__('Enter pipeline name')"
+                required
+              />
+            </div>
+
+            <!-- Organization -->
+            <div>
+              <label class="text-sm font-medium text-ink-gray-7">
+                {{ __('Organization') }}
+              </label>
+              <Input
+                v-model="newPipeline.organization"
+                type="text"
+                class="mt-1"
+                :placeholder="__('Enter organization name')"
+              />
+            </div>
+
+            <!-- Status -->
+            <div>
+              <label class="text-sm font-medium text-ink-gray-7">
+                {{ __('Status') }} <span class="text-red-500">*</span>
+              </label>
+              <Autocomplete
+                v-model="newPipeline.status"
+                :options="pipelineStatuses"
+                class="mt-1"
+                required
+              />
+            </div>
+
+            <!-- Pipeline Owner -->
+            <div>
+              <label class="text-sm font-medium text-ink-gray-7">
+                {{ __('Pipeline Owner') }}
+              </label>
+              <Input
+                v-model="newPipeline.pipeline_owner"
+                type="text"
+                class="mt-1"
+                :placeholder="__('Enter pipeline owner')"
+              />
+            </div>
+
+            <!-- Email -->
+            <div>
+              <label class="text-sm font-medium text-ink-gray-7">
+                {{ __('Email') }}
+              </label>
+              <Input
+                v-model="newPipeline.email"
+                type="email"
+                class="mt-1"
+                :placeholder="__('Enter email address')"
+              />
+            </div>
+
+            <!-- Mobile No -->
+            <!-- <div>
+              <label class="text-sm font-medium text-ink-gray-7">
+                {{ __('Mobile No') }}
+              </label>
+              <Input
+                v-model="newPipeline.mobile_no"
+                type="tel"
+                class="mt-1"
+                :placeholder="__('Enter mobile number')"
+              />
+            </div> -->
+
+            <!-- Website -->
+            <!-- <div>
+              <label class="text-sm font-medium text-ink-gray-7">
+                {{ __('Website') }}
+              </label>
+              <Input
+                v-model="newPipeline.website"
+                type="url"
+                class="mt-1"
+                :placeholder="__('Enter website URL')"
+              />
+            </div> -->
+          </div>
+
+          <ErrorMessage class="mt-4" v-if="pipelineError" :message="__(pipelineError)" />
+        </div>
+      </div>
+      <div class="px-4 pb-7 pt-4 sm:px-6">
+        <div class="flex flex-row-reverse gap-2">
+          <Button
+            variant="solid"
+            :label="__('Create')"
+            :loading="isPipelineCreating"
+            @click="createNewPipeline"
+          />
+          <Button
+            variant="outline"
+            :label="__('Cancel')"
+            @click="showPipelineModal = false"
+          />
+        </div>
+      </div>
+    </template>
+  </Dialog>
+
   <NoteModal
     v-if="showNoteModal"
     v-model="showNoteModal"
@@ -275,7 +414,6 @@ import PipelinesIcon from '@/components/Icons/DealsIcon.vue'
 import LayoutHeader from '@/components/LayoutHeader.vue'
 import PipelinesListView from '@/components/ListViews/PipelinesListView.vue'
 import KanbanView from '@/components/Kanban/KanbanView.vue'
-import PipelineModal from '@/components/Modals/PipelineModal.vue'
 import NoteModal from '@/components/Modals/NoteModal.vue'
 import TaskModal from '@/components/Modals/TaskModal.vue'
 import ViewControls from '@/components/ViewControls.vue'
@@ -285,8 +423,8 @@ import { usersStore } from '@/stores/users'
 import { statusesStore } from '@/stores/statuses'
 import { callEnabled } from '@/composables/settings'
 import { formatDate, timeAgo, website, formatTime } from '@/utils'
-import { Avatar, Tooltip, Dropdown } from 'frappe-ui'
-import { useRoute } from 'vue-router'
+import { Avatar, Tooltip, Dropdown, Dialog, Input, Autocomplete, ErrorMessage, Toast } from 'frappe-ui'
+import { useRoute, useRouter } from 'vue-router'
 import { ref, computed, reactive, h, watch, onMounted } from 'vue'
 
 const { getFormattedPercent, getFormattedFloat, getFormattedCurrency } =
@@ -309,7 +447,8 @@ function getPipelineStatus(status) {
       'Closed': 'gray',
       'Won': 'green',
       'Lost': 'red',
-      'Qualified': 'purple'
+      'Qualified': 'purple',
+      'Ongoing': 'blue'
     }
     return {
       color: statusColors[status] || 'gray'
@@ -318,11 +457,54 @@ function getPipelineStatus(status) {
 }
 
 const route = useRoute()
+const router = useRouter()
 
 const pipelinesListView = ref(null)
 const showPipelineModal = ref(false)
+const isPipelineCreating = ref(false)
+const pipelineError = ref(null)
+const showSuccessToast = ref(false)
+const successMessage = ref('')
 
 const defaults = reactive({})
+
+// New pipeline data
+const newPipeline = reactive({
+  pipeline_name: '',
+  organization: '',
+  status: 'Open',
+  pipeline_owner: '',
+  email: '',
+  mobile_no: '',
+  website: ''
+})
+
+// Pipeline status options
+const pipelineStatuses = computed(() => {
+  try {
+    const { statusOptions } = statusesStore()
+    let statuses = statusOptions('pipeline') || []
+    if (statuses.length === 0) {
+      // Fallback statuses if none are defined
+      statuses = [
+        { value: 'Open', label: 'Open' },
+        { value: 'In Progress', label: 'In Progress' },
+        { value: 'Ongoing', label: 'Ongoing' },
+        { value: 'Completed', label: 'Completed' },
+        { value: 'Closed', label: 'Closed' }
+      ]
+    }
+    return statuses
+  } catch (error) {
+    console.warn('Error getting pipeline statuses:', error)
+    return [
+      { value: 'Open', label: 'Open' },
+      { value: 'In Progress', label: 'In Progress' },
+      { value: 'Ongoing', label: 'Ongoing' },
+      { value: 'Completed', label: 'Completed' }
+    ]
+  }
+})
 
 // pipelines data is loaded in the ViewControls component
 const pipelines = ref({})
@@ -345,6 +527,11 @@ onMounted(() => {
       console.error('Error loading saved columns:', e)
       savedColumns.value = null
     }
+  }
+  
+  // Set default pipeline owner
+  if (!newPipeline.pipeline_owner) {
+    newPipeline.pipeline_owner = getUser().name
   }
 })
 
@@ -603,4 +790,119 @@ function showTask(name) {
   docname.value = name
   showTaskModal.value = true
 }
+
+// Create new pipeline function - NO VALIDATION FOR EMAIL AND PHONE
+async function createNewPipeline() {
+  // Reset error
+  pipelineError.value = null
+  
+  // Validate required fields only
+  if (!newPipeline.pipeline_name) {
+    pipelineError.value = __('Pipeline Name is mandatory')
+    return
+  }
+  
+  if (!newPipeline.status) {
+    pipelineError.value = __('Status is required')
+    return
+  }
+
+  // Auto-fix website format if provided
+  if (newPipeline.website && !newPipeline.website.startsWith('http')) {
+    newPipeline.website = 'https://' + newPipeline.website
+  }
+
+  isPipelineCreating.value = true
+
+  try {
+    const response = await fetch('/api/method/frappe.client.insert', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Frappe-CSRF-Token': window.csrf_token || await getCSRFToken()
+      },
+      body: JSON.stringify({
+        doc: {
+          doctype: 'CRM Pipeline',
+          ...newPipeline,
+        }
+      })
+    })
+    
+    const result = await response.json()
+    
+    if (!response.ok) {
+      throw new Error(result.message || 'Failed to create pipeline')
+    }
+
+    if (result.exc) {
+      throw new Error('Server error occurred while creating pipeline')
+    }
+
+    isPipelineCreating.value = false
+    showPipelineModal.value = false
+    
+    // Show success message
+    successMessage.value = __('Pipeline created successfully')
+    showSuccessToast.value = true
+    
+    // Reset form
+    resetPipelineForm()
+    
+    // Refresh the pipelines list
+    if (viewControls.value && viewControls.value.refresh) {
+      viewControls.value.refresh()
+    }
+    
+    // Force page reload to ensure data is fresh
+    setTimeout(() => {
+      window.location.reload()
+    }, 1000)
+    
+  } catch (err) {
+    isPipelineCreating.value = false
+    console.error('Error creating pipeline:', err)
+    
+    if (err.messages) {
+      pipelineError.value = err.messages.join('\n')
+    } else if (err.message) {
+      pipelineError.value = err.message
+    } else {
+      pipelineError.value = __('Failed to create pipeline. Please try again.')
+    }
+  }
+}
+
+// Helper function to get CSRF token
+async function getCSRFToken() {
+  try {
+    const response = await fetch('/api/method/frappe.csrf_token.get_token')
+    const data = await response.json()
+    return data.csrf_token
+  } catch (error) {
+    console.error('Error getting CSRF token:', error)
+    return ''
+  }
+}
+
+// Reset form function
+function resetPipelineForm() {
+  Object.assign(newPipeline, {
+    pipeline_name: '',
+    organization: '',
+    status: 'Open',
+    pipeline_owner: getUser().name,
+    email: '',
+    mobile_no: '',
+    website: ''
+  })
+  pipelineError.value = null
+}
+
+// Watch for modal close and reset form
+watch(showPipelineModal, (newVal) => {
+  if (!newVal) {
+    resetPipelineForm()
+  }
+})
 </script>

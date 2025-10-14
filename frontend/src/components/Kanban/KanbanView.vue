@@ -195,12 +195,12 @@ const columns = computed(() => {
     return []
   let _columns = kanban.value.data.data
 
-  let has_color = _columns.some((column) => column.column?.color)
-  if (!has_color) {
-    _columns.forEach((column, i) => {
-      column.column['color'] = colors[i % colors.length]
-    })
-  }
+  // let has_color = _columns.some((column) => column.column?.color)
+  // if (!has_color) {
+  //   _columns.forEach((column, i) => {
+  //     column.column['color'] = colors[i % colors.length]
+  //   })
+  // }
   return _columns
 })
 
