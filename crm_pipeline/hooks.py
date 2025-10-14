@@ -274,8 +274,5 @@ fixtures = [
     {
         "dt": "Property Setter",
     },
-        {
-        "dt": "CRM Pipeline",
-    }
 ]
 
