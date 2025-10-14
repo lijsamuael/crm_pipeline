@@ -152,7 +152,7 @@ async function convertToDeal() {
 
   await triggerConvertToDeal?.(props.pipeline, deal.doc, () => (show.value = false))
 
-  let _deal = await call('crm.fcrm.doctype.crm_pipeline.crm_pipeline.convert_to_deal', {
+  let _deal = await call('crm_pipeline.api.convert_to_deal', {
     pipeline: props.pipeline.name,
     deal: deal.doc,
     existing_contact: existingContact.value,

@@ -72,6 +72,11 @@ function getBrowserTimezone() {
   return Intl.DateTimeFormat().resolvedOptions().timeZone
 }
 
+export function TemplateOption(){
+  return;
+}
+
+
 export function prettyDate(date, mini = false) {
   if (!date) return ''
 
