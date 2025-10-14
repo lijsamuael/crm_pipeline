@@ -143,6 +143,16 @@ doc_events = {
 # ---------------
 # Hook on document methods and events
 
+
+# Overriding Methods
+override_whitelisted_methods = {
+    # "crm.api.doc.get_data": "crm_pipeline.api.get_data",
+    "crm.api.doc.get_fields": "crm_pipeline.api.get_fields",
+    "crm.fcrm.doctype.crm_view_settings.crm_view_settings.create_or_update_standard_view": "crm_pipeline.api.create_or_update_standard_view",
+    "crm.api.activities.get_activities": "crm_pipeline.activities.get_activities",
+
+}
+
 # doc_events = {
 # 	"*": {
 # 		"on_update": "method",
