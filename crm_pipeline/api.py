@@ -270,9 +270,6 @@ def convert_to_deal(pipeline, deal=None, existing_contact=None, existing_organiz
             if hasattr(deal_doc, 'expected_deal_value'):
                 new_deal.expected_deal_value = deal_doc.expected_deal_value
             
-            # Set custom field if it exists
-            if hasattr(deal_doc, 'custom_est_quotation_sale') and deal_doc.custom_est_quotation_sale:
-                new_deal.est_qouotation_sales = deal_doc.custom_est_quotation_sales
             
             pipeline_doc.save(ignore_permissions=True)
             print(f"🔗 Deal linked to pipeline deals child table")
@@ -301,7 +298,62 @@ def convert_to_deal(pipeline, deal=None, existing_contact=None, existing_organiz
         frappe.log_error(f"Error converting pipeline to deal: {str(e)}")
         frappe.throw(_("Error converting pipeline to deal: {0}").format(str(e)))
         
+
+
+@frappe.whitelist()
+def link_deal_to_pipeline(pipeline, deal_data):
+    """
+    Simple function to link deal to pipeline's deals child table
+    """
+    try:
+        # Get pipeline document
+        pipeline_doc = frappe.get_doc("CRM Pipeline", pipeline)
         
+        # Parse deal data if string
+        if isinstance(deal_data, str):
+            deal_data = frappe.parse_json(deal_data)
+        
+        print("Received deal data:", deal_data)  # Debug log
+        
+        # Link deal to pipeline child table using the data directly
+        if hasattr(pipeline_doc, 'deals'):
+            # Create the child table row with all incoming data
+            new_deal = pipeline_doc.append("deals", deal_data)
+            
+            pipeline_doc.save(ignore_permissions=True)
+            frappe.db.commit()
+
+        return {"success": True, "message": "Deal linked to pipeline, successfully.", "data": deal_data}
+
+    except Exception as e:
+        frappe.log_error(f"Error linking deal to pipeline: {str(e)}")
+        return {"success": False, "error": str(e)}
+    
+
+
+@frappe.whitelist()
+def unlink_deal_from_pipeline(pipeline, deal_name):
+    """
+    Remove deal from pipeline's deals child table
+    """
+    try:
+        # Get pipeline document
+        pipeline_doc = frappe.get_doc("CRM Pipeline", pipeline)
+        
+        # Remove the deal from child table
+        if hasattr(pipeline_doc, 'deals'):
+            # Find and remove the deal by name
+            pipeline_doc.deals = [d for d in pipeline_doc.deals if d.name != deal_name]
+            
+            pipeline_doc.save(ignore_permissions=True)
+            frappe.db.commit()
+            
+        return {"success": True, "message": "Deal unlinked from pipeline"}
+        
+    except Exception as e:
+        frappe.log_error(f"Error unlinking deal from pipeline: {str(e)}")
+        return {"success": False, "error": str(e)}
+    
         
         
 @frappe.whitelist()
