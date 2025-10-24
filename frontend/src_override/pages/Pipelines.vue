@@ -91,6 +91,9 @@
             [
               'modified',
               'creation',
+              'first_response_time',
+              'first_responded_on',
+              'response_by',
             ].includes(titleField)
           "
           class="truncate text-base"
@@ -98,6 +101,15 @@
           <Tooltip :text="getRow(itemName, titleField).label">
             <div>{{ getRow(itemName, titleField).timeAgo }}</div>
           </Tooltip>
+        </div>
+        <div v-else-if="titleField === 'sla_status'" class="truncate text-base">
+          <Badge
+            v-if="getRow(itemName, titleField).value"
+            :variant="'subtle'"
+            :theme="getRow(itemName, titleField).color"
+            size="md"
+            :label="getRow(itemName, titleField).value"
+          />
         </div>
         <div
           v-else-if="getRow(itemName, titleField).label"
@@ -151,6 +163,9 @@
             [
               'modified',
               'creation',
+              'first_response_time',
+              'first_responded_on',
+              'response_by',
             ].includes(fieldName)
           "
           class="truncate text-base"
@@ -158,6 +173,15 @@
           <Tooltip :text="getRow(itemName, fieldName).label">
             <div>{{ getRow(itemName, fieldName).timeAgo }}</div>
           </Tooltip>
+        </div>
+        <div v-else-if="fieldName === 'sla_status'" class="truncate text-base">
+          <Badge
+            v-if="getRow(itemName, fieldName).value"
+            :variant="'subtle'"
+            :theme="getRow(itemName, fieldName).color"
+            size="md"
+            :label="getRow(itemName, fieldName).value"
+          />
         </div>
         <div v-else-if="fieldName === '_assign'" class="flex items-center">
           <MultipleAvatar
@@ -210,7 +234,7 @@
     v-model="pipelines.data.page_length_count"
     v-model:list="pipelines"
     :rows="rows"
-    :columns="displayColumns"
+    :columns="pipelines.data.columns"
     :options="{
       showTooltip: false,
       resizeColumn: true,
@@ -240,150 +264,11 @@
       />
     </div>
   </div>
-
-  <!-- Success Toast -->
-  <Toast
-    v-if="showSuccessToast"
-    :title="successMessage"
-    @close="showSuccessToast = false"
+  <PipelineModal
+    v-if="showPipelineModal"
+    v-model="showPipelineModal"
+    :defaults="defaults"
   />
-
-  <!-- Inline Pipeline Modal -->
-  <Dialog v-model="showPipelineModal" :options="{ size: '3xl' }">
-    <template #body>
-      <div class="bg-surface-modal px-4 pb-6 pt-5 sm:px-6">
-        <div class="mb-5 flex items-center justify-between">
-          <div>
-            <h3 class="text-2xl font-semibold leading-6 text-ink-gray-9">
-              {{ __('Create Pipeline') }}
-            </h3>
-          </div>
-          <div class="flex items-center gap-1">
-            <Button
-              variant="ghost"
-              class="w-7"
-              @click="showPipelineModal = false"
-              icon="x"
-            />
-          </div>
-        </div>
-        <div>
-          <!-- Form Fields -->
-          <div class="space-y-4">
-            <!-- Pipeline Name -->
-            <div>
-              <label class="text-sm font-medium text-ink-gray-7">
-                {{ __('Pipeline Name') }} <span class="text-red-500">*</span>
-              </label>
-              <Input
-                v-model="newPipeline.pipeline_name"
-                type="text"
-                class="mt-1"
-                :placeholder="__('Enter pipeline name')"
-                required
-              />
-            </div>
-
-            <!-- Organization -->
-            <div>
-              <label class="text-sm font-medium text-ink-gray-7">
-                {{ __('Organization') }}
-              </label>
-              <Input
-                v-model="newPipeline.organization"
-                type="text"
-                class="mt-1"
-                :placeholder="__('Enter organization name')"
-              />
-            </div>
-
-            <!-- Status -->
-            <div>
-              <label class="text-sm font-medium text-ink-gray-7">
-                {{ __('Status') }} <span class="text-red-500">*</span>
-              </label>
-              <Autocomplete
-                v-model="newPipeline.status"
-                :options="pipelineStatuses"
-                class="mt-1"
-                required
-              />
-            </div>
-
-            <!-- Pipeline Owner -->
-            <div>
-              <label class="text-sm font-medium text-ink-gray-7">
-                {{ __('Pipeline Owner') }}
-              </label>
-              <Input
-                v-model="newPipeline.pipeline_owner"
-                type="text"
-                class="mt-1"
-                :placeholder="__('Enter pipeline owner')"
-              />
-            </div>
-
-            <!-- Email -->
-            <div>
-              <label class="text-sm font-medium text-ink-gray-7">
-                {{ __('Email') }}
-              </label>
-              <Input
-                v-model="newPipeline.email"
-                type="email"
-                class="mt-1"
-                :placeholder="__('Enter email address')"
-              />
-            </div>
-
-            <!-- Mobile No -->
-            <!-- <div>
-              <label class="text-sm font-medium text-ink-gray-7">
-                {{ __('Mobile No') }}
-              </label>
-              <Input
-                v-model="newPipeline.mobile_no"
-                type="tel"
-                class="mt-1"
-                :placeholder="__('Enter mobile number')"
-              />
-            </div> -->
-
-            <!-- Website -->
-            <!-- <div>
-              <label class="text-sm font-medium text-ink-gray-7">
-                {{ __('Website') }}
-              </label>
-              <Input
-                v-model="newPipeline.website"
-                type="url"
-                class="mt-1"
-                :placeholder="__('Enter website URL')"
-              />
-            </div> -->
-          </div>
-
-          <ErrorMessage class="mt-4" v-if="pipelineError" :message="__(pipelineError)" />
-        </div>
-      </div>
-      <div class="px-4 pb-7 pt-4 sm:px-6">
-        <div class="flex flex-row-reverse gap-2">
-          <Button
-            variant="solid"
-            :label="__('Create')"
-            :loading="isPipelineCreating"
-            @click="createNewPipeline"
-          />
-          <Button
-            variant="outline"
-            :label="__('Cancel')"
-            @click="showPipelineModal = false"
-          />
-        </div>
-      </div>
-    </template>
-  </Dialog>
-
   <NoteModal
     v-if="showNoteModal"
     v-model="showNoteModal"
@@ -410,10 +295,11 @@ import NoteIcon from '@/components/Icons/NoteIcon.vue'
 import TaskIcon from '@/components/Icons/TaskIcon.vue'
 import CommentIcon from '@/components/Icons/CommentIcon.vue'
 import IndicatorIcon from '@/components/Icons/IndicatorIcon.vue'
-import PipelinesIcon from '@/components/Icons/DealsIcon.vue'
+import PipelinesIcon from '@/components/Icons/LeadsIcon.vue'
 import LayoutHeader from '@/components/LayoutHeader.vue'
 import PipelinesListView from '@/components/ListViews/PipelinesListView.vue'
 import KanbanView from '@/components/Kanban/KanbanView.vue'
+import PipelineModal from '@/components/Modals/PipelineModal.vue'
 import NoteModal from '@/components/Modals/NoteModal.vue'
 import TaskModal from '@/components/Modals/TaskModal.vue'
 import ViewControls from '@/components/ViewControls.vue'
@@ -423,88 +309,22 @@ import { usersStore } from '@/stores/users'
 import { statusesStore } from '@/stores/statuses'
 import { callEnabled } from '@/composables/settings'
 import { formatDate, timeAgo, website, formatTime } from '@/utils'
-import { Avatar, Tooltip, Dropdown, Dialog, Input, Autocomplete, ErrorMessage, Toast } from 'frappe-ui'
-import { useRoute, useRouter } from 'vue-router'
-import { ref, computed, reactive, h, watch, onMounted } from 'vue'
+import { Avatar, Tooltip, Dropdown } from 'frappe-ui'
+import { useRoute } from 'vue-router'
+import { ref, computed, reactive, h } from 'vue'
 
 const { getFormattedPercent, getFormattedFloat, getFormattedCurrency } =
   getMeta('CRM Pipeline')
 const { makeCall } = globalStore()
 const { getUser } = usersStore()
-
-// Safe pipeline status function
-function getPipelineStatus(status) {
-  try {
-    const { getPipelineStatus: getStatus } = statusesStore()
-    const result = getStatus(status)
-    return result || { color: 'gray' }
-  } catch (error) {
-    console.warn('getPipelineStatus not available, using default')
-    // Fallback color mapping
-    const statusColors = {
-      'Open': 'green',
-      'In Progress': 'blue', 
-      'Closed': 'gray',
-      'Won': 'green',
-      'Lost': 'red',
-      'Qualified': 'purple',
-      'Ongoing': 'blue'
-    }
-    return {
-      color: statusColors[status] || 'gray'
-    }
-  }
-}
+const { getPipelineStatus } = statusesStore()
 
 const route = useRoute()
-const router = useRouter()
 
 const pipelinesListView = ref(null)
 const showPipelineModal = ref(false)
-const isPipelineCreating = ref(false)
-const pipelineError = ref(null)
-const showSuccessToast = ref(false)
-const successMessage = ref('')
 
 const defaults = reactive({})
-
-// New pipeline data
-const newPipeline = reactive({
-  pipeline_name: '',
-  organization: '',
-  status: 'Open',
-  pipeline_owner: '',
-  email: '',
-  mobile_no: '',
-  website: ''
-})
-
-// Pipeline status options
-const pipelineStatuses = computed(() => {
-  try {
-    const { statusOptions } = statusesStore()
-    let statuses = statusOptions('pipeline') || []
-    if (statuses.length === 0) {
-      // Fallback statuses if none are defined
-      statuses = [
-        { value: 'Open', label: 'Open' },
-        { value: 'In Progress', label: 'In Progress' },
-        { value: 'Ongoing', label: 'Ongoing' },
-        { value: 'Completed', label: 'Completed' },
-        { value: 'Closed', label: 'Closed' }
-      ]
-    }
-    return statuses
-  } catch (error) {
-    console.warn('Error getting pipeline statuses:', error)
-    return [
-      { value: 'Open', label: 'Open' },
-      { value: 'In Progress', label: 'In Progress' },
-      { value: 'Ongoing', label: 'Ongoing' },
-      { value: 'Completed', label: 'Completed' }
-    ]
-  }
-})
 
 // pipelines data is loaded in the ViewControls component
 const pipelines = ref({})
@@ -513,59 +333,6 @@ const triggerResize = ref(1)
 const updatedPageCount = ref(20)
 const viewControls = ref(null)
 
-// Column persistence - simple approach
-const savedColumns = ref(null)
-
-// Load saved columns on mount
-onMounted(() => {
-  const saved = localStorage.getItem('crm_pipeline_columns')
-  if (saved) {
-    try {
-      savedColumns.value = JSON.parse(saved)
-      console.log('Loaded saved columns from localStorage')
-    } catch (e) {
-      console.error('Error loading saved columns:', e)
-      savedColumns.value = null
-    }
-  }
-  
-  // Set default pipeline owner
-  if (!newPipeline.pipeline_owner) {
-    newPipeline.pipeline_owner = getUser().name
-  }
-})
-
-// Use saved columns or API columns
-const displayColumns = computed(() => {
-  return savedColumns.value || pipelines.value?.data?.columns || []
-})
-
-// Save columns with debouncing to prevent loops
-let saveTimeout = null
-watch(() => pipelines.value?.data?.columns, (newColumns) => {
-  if (!newColumns || newColumns.length === 0) return
-  
-  // Debounce the save to prevent multiple rapid saves
-  clearTimeout(saveTimeout)
-  saveTimeout = setTimeout(() => {
-    // Convert to plain object and save
-    try {
-      const plainColumns = JSON.parse(JSON.stringify(newColumns))
-      const newColumnsStr = JSON.stringify(plainColumns)
-      const currentSavedStr = JSON.stringify(savedColumns.value)
-      
-      // Only save if columns actually changed
-      if (newColumnsStr !== currentSavedStr) {
-        savedColumns.value = plainColumns
-        localStorage.setItem('crm_pipeline_columns', newColumnsStr)
-        console.log('Columns saved successfully')
-      }
-    } catch (e) {
-      console.error('Error saving columns:', e)
-    }
-  }, 300) // 300ms debounce
-}, { deep: true })
-
 function getRow(name, field) {
   function getValue(value) {
     if (value && typeof value === 'object' && !Array.isArray(value)) {
@@ -573,8 +340,7 @@ function getRow(name, field) {
     }
     return { label: value }
   }
-  const row = rows.value?.find((row) => row.name == name)
-  return row ? getValue(row[field]) : { label: '' }
+  return getValue(rows.value?.find((row) => row.name == name)[field])
 }
 
 // Rows
@@ -597,8 +363,7 @@ const rows = computed(() => {
 function getGroupedByRows(listRows, groupByField, columns) {
   let groupedRows = []
 
-  const options = groupByField.options || []
-  options.forEach((option) => {
+  groupByField.options?.forEach((option) => {
     let filteredRows = []
 
     if (!option) {
@@ -618,7 +383,7 @@ function getGroupedByRows(listRows, groupByField, columns) {
     if (groupByField.fieldname == 'status') {
       groupDetail.icon = () =>
         h(IndicatorIcon, {
-          class: getPipelineStatus(option).color,
+          class: getPipelineStatus(option)?.color,
         })
     }
     groupedRows.push(groupDetail)
@@ -644,9 +409,7 @@ function parseRows(rows, columns = []) {
 
   return rows.map((pipeline) => {
     let _rows = {}
-    const rowFields = pipelines.value?.data.rows || []
-    
-    rowFields.forEach((row) => {
+    pipelines.value?.data.rows.forEach((row) => {
       _rows[row] = pipeline[row]
 
       let fieldType = columns?.find((col) => (col[key] || col.value) == row)?.[
@@ -677,7 +440,7 @@ function parseRows(rows, columns = []) {
         _rows[row] = {
           label: pipeline.pipeline_name,
           image: pipeline.image,
-          image_label: pipeline.lead_name || pipeline.pipeline_name,
+          image_label: pipeline.first_name,
         }
       } else if (row == 'organization') {
         _rows[row] = pipeline.organization
@@ -686,7 +449,28 @@ function parseRows(rows, columns = []) {
       } else if (row == 'status') {
         _rows[row] = {
           label: pipeline.status,
-          color: getPipelineStatus(pipeline.status).color,
+          color: getPipelineStatus(pipeline.status)?.color,
+        }
+      } else if (row == 'sla_status') {
+        let value = pipeline.sla_status
+        let tooltipText = value
+        let color =
+          pipeline.sla_status == 'Failed'
+            ? 'red'
+            : pipeline.sla_status == 'Fulfilled'
+              ? 'green'
+              : 'orange'
+        if (value == 'First Response Due') {
+          value = __(timeAgo(pipeline.response_by))
+          tooltipText = formatDate(pipeline.response_by)
+          if (new Date(pipeline.response_by) < new Date()) {
+            color = 'red'
+          }
+        }
+        _rows[row] = {
+          label: tooltipText,
+          value: value,
+          color: color,
         }
       } else if (row == 'pipeline_owner') {
         _rows[row] = {
@@ -705,32 +489,32 @@ function parseRows(rows, columns = []) {
           label: formatDate(pipeline[row]),
           timeAgo: __(timeAgo(pipeline[row])),
         }
-      } else if (['est_pipeline_value', 'total_deal_value'].includes(row)) {
+      } else if (
+        ['first_response_time', 'first_responded_on', 'response_by'].includes(
+          row,
+        )
+      ) {
+        let field = row == 'response_by' ? 'response_by' : 'first_responded_on'
         _rows[row] = {
-          label: pipeline[row] ? formatCurrency(pipeline[row]) : '',
-          value: pipeline[row]
+          label: pipeline[field] ? formatDate(pipeline[field]) : '',
+          timeAgo: pipeline[row]
+            ? row == 'first_response_time'
+              ? formatTime(pipeline[row])
+              : __(timeAgo(pipeline[row]))
+            : '',
         }
       }
     })
-    _rows['_email_count'] = pipeline._email_count || 0
-    _rows['_note_count'] = pipeline._note_count || 0
-    _rows['_task_count'] = pipeline._task_count || 0
-    _rows['_comment_count'] = pipeline._comment_count || 0
+    _rows['_email_count'] = pipeline._email_count
+    _rows['_note_count'] = pipeline._note_count
+    _rows['_task_count'] = pipeline._task_count
+    _rows['_comment_count'] = pipeline._comment_count
     return _rows
   })
 }
 
-function formatCurrency(value) {
-  if (!value) return ''
-  // Simple currency formatting
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD'
-  }).format(parseFloat(value))
-}
-
 function onNewClick(column) {
-  let column_field = pipelines.value.params?.column_field
+  let column_field = pipelines.value.params.column_field
 
   if (column_field) {
     defaults[column_field] = column.column.name
@@ -790,119 +574,4 @@ function showTask(name) {
   docname.value = name
   showTaskModal.value = true
 }
-
-// Create new pipeline function - NO VALIDATION FOR EMAIL AND PHONE
-async function createNewPipeline() {
-  // Reset error
-  pipelineError.value = null
-  
-  // Validate required fields only
-  if (!newPipeline.pipeline_name) {
-    pipelineError.value = __('Pipeline Name is mandatory')
-    return
-  }
-  
-  if (!newPipeline.status) {
-    pipelineError.value = __('Status is required')
-    return
-  }
-
-  // Auto-fix website format if provided
-  if (newPipeline.website && !newPipeline.website.startsWith('http')) {
-    newPipeline.website = 'https://' + newPipeline.website
-  }
-
-  isPipelineCreating.value = true
-
-  try {
-    const response = await fetch('/api/method/frappe.client.insert', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Frappe-CSRF-Token': window.csrf_token || await getCSRFToken()
-      },
-      body: JSON.stringify({
-        doc: {
-          doctype: 'CRM Pipeline',
-          ...newPipeline,
-        }
-      })
-    })
-    
-    const result = await response.json()
-    
-    if (!response.ok) {
-      throw new Error(result.message || 'Failed to create pipeline')
-    }
-
-    if (result.exc) {
-      throw new Error('Server error occurred while creating pipeline')
-    }
-
-    isPipelineCreating.value = false
-    showPipelineModal.value = false
-    
-    // Show success message
-    successMessage.value = __('Pipeline created successfully')
-    showSuccessToast.value = true
-    
-    // Reset form
-    resetPipelineForm()
-    
-    // Refresh the pipelines list
-    if (viewControls.value && viewControls.value.refresh) {
-      viewControls.value.refresh()
-    }
-    
-    // Force page reload to ensure data is fresh
-    setTimeout(() => {
-      window.location.reload()
-    }, 1000)
-    
-  } catch (err) {
-    isPipelineCreating.value = false
-    console.error('Error creating pipeline:', err)
-    
-    if (err.messages) {
-      pipelineError.value = err.messages.join('\n')
-    } else if (err.message) {
-      pipelineError.value = err.message
-    } else {
-      pipelineError.value = __('Failed to create pipeline. Please try again.')
-    }
-  }
-}
-
-// Helper function to get CSRF token
-async function getCSRFToken() {
-  try {
-    const response = await fetch('/api/method/frappe.csrf_token.get_token')
-    const data = await response.json()
-    return data.csrf_token
-  } catch (error) {
-    console.error('Error getting CSRF token:', error)
-    return ''
-  }
-}
-
-// Reset form function
-function resetPipelineForm() {
-  Object.assign(newPipeline, {
-    pipeline_name: '',
-    organization: '',
-    status: 'Open',
-    pipeline_owner: getUser().name,
-    email: '',
-    mobile_no: '',
-    website: ''
-  })
-  pipelineError.value = null
-}
-
-// Watch for modal close and reset form
-watch(showPipelineModal, (newVal) => {
-  if (!newVal) {
-    resetPipelineForm()
-  }
-})
 </script>

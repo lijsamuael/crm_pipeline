@@ -91,6 +91,9 @@
             [
               'modified',
               'creation',
+              'first_response_time',
+              'first_responded_on',
+              'response_by',
             ].includes(titleField)
           "
           class="truncate text-base"
@@ -98,6 +101,15 @@
           <Tooltip :text="getRow(itemName, titleField).label">
             <div>{{ getRow(itemName, titleField).timeAgo }}</div>
           </Tooltip>
+        </div>
+        <div v-else-if="titleField === 'sla_status'" class="truncate text-base">
+          <Badge
+            v-if="getRow(itemName, titleField).value"
+            :variant="'subtle'"
+            :theme="getRow(itemName, titleField).color"
+            size="md"
+            :label="getRow(itemName, titleField).value"
+          />
         </div>
         <div
           v-else-if="getRow(itemName, titleField).label"
@@ -151,6 +163,9 @@
             [
               'modified',
               'creation',
+              'first_response_time',
+              'first_responded_on',
+              'response_by',
             ].includes(fieldName)
           "
           class="truncate text-base"
@@ -158,6 +173,15 @@
           <Tooltip :text="getRow(itemName, fieldName).label">
             <div>{{ getRow(itemName, fieldName).timeAgo }}</div>
           </Tooltip>
+        </div>
+        <div v-else-if="fieldName === 'sla_status'" class="truncate text-base">
+          <Badge
+            v-if="getRow(itemName, fieldName).value"
+            :variant="'subtle'"
+            :theme="getRow(itemName, fieldName).color"
+            size="md"
+            :label="getRow(itemName, fieldName).value"
+          />
         </div>
         <div v-else-if="fieldName === '_assign'" class="flex items-center">
           <MultipleAvatar
@@ -210,7 +234,7 @@
     v-model="pipelines.data.page_length_count"
     v-model:list="pipelines"
     :rows="rows"
-    :columns="displayColumns"
+    :columns="pipelines.data.columns"
     :options="{
       showTooltip: false,
       resizeColumn: true,
@@ -271,7 +295,7 @@ import NoteIcon from '@/components/Icons/NoteIcon.vue'
 import TaskIcon from '@/components/Icons/TaskIcon.vue'
 import CommentIcon from '@/components/Icons/CommentIcon.vue'
 import IndicatorIcon from '@/components/Icons/IndicatorIcon.vue'
-import PipelinesIcon from '@/components/Icons/DealsIcon.vue'
+import PipelinesIcon from '@/components/Icons/LeadsIcon.vue'
 import LayoutHeader from '@/components/LayoutHeader.vue'
 import PipelinesListView from '@/components/ListViews/PipelinesListView.vue'
 import KanbanView from '@/components/Kanban/KanbanView.vue'
@@ -287,35 +311,13 @@ import { callEnabled } from '@/composables/settings'
 import { formatDate, timeAgo, website, formatTime } from '@/utils'
 import { Avatar, Tooltip, Dropdown } from 'frappe-ui'
 import { useRoute } from 'vue-router'
-import { ref, computed, reactive, h, watch, onMounted } from 'vue'
+import { ref, computed, reactive, h } from 'vue'
 
 const { getFormattedPercent, getFormattedFloat, getFormattedCurrency } =
   getMeta('CRM Pipeline')
 const { makeCall } = globalStore()
 const { getUser } = usersStore()
-
-// Safe pipeline status function
-function getPipelineStatus(status) {
-  try {
-    const { getPipelineStatus: getStatus } = statusesStore()
-    const result = getStatus(status)
-    return result || { color: 'gray' }
-  } catch (error) {
-    console.warn('getPipelineStatus not available, using default')
-    // Fallback color mapping
-    const statusColors = {
-      'Open': 'green',
-      'In Progress': 'blue', 
-      'Closed': 'gray',
-      'Won': 'green',
-      'Lost': 'red',
-      'Qualified': 'purple'
-    }
-    return {
-      color: statusColors[status] || 'gray'
-    }
-  }
-}
+const { getPipelineStatus } = statusesStore()
 
 const route = useRoute()
 
@@ -331,54 +333,6 @@ const triggerResize = ref(1)
 const updatedPageCount = ref(20)
 const viewControls = ref(null)
 
-// Column persistence - simple approach
-const savedColumns = ref(null)
-
-// Load saved columns on mount
-onMounted(() => {
-  const saved = localStorage.getItem('crm_pipeline_columns')
-  if (saved) {
-    try {
-      savedColumns.value = JSON.parse(saved)
-      console.log('Loaded saved columns from localStorage')
-    } catch (e) {
-      console.error('Error loading saved columns:', e)
-      savedColumns.value = null
-    }
-  }
-})
-
-// Use saved columns or API columns
-const displayColumns = computed(() => {
-  return savedColumns.value || pipelines.value?.data?.columns || []
-})
-
-// Save columns with debouncing to prevent loops
-let saveTimeout = null
-watch(() => pipelines.value?.data?.columns, (newColumns) => {
-  if (!newColumns || newColumns.length === 0) return
-  
-  // Debounce the save to prevent multiple rapid saves
-  clearTimeout(saveTimeout)
-  saveTimeout = setTimeout(() => {
-    // Convert to plain object and save
-    try {
-      const plainColumns = JSON.parse(JSON.stringify(newColumns))
-      const newColumnsStr = JSON.stringify(plainColumns)
-      const currentSavedStr = JSON.stringify(savedColumns.value)
-      
-      // Only save if columns actually changed
-      if (newColumnsStr !== currentSavedStr) {
-        savedColumns.value = plainColumns
-        localStorage.setItem('crm_pipeline_columns', newColumnsStr)
-        console.log('Columns saved successfully')
-      }
-    } catch (e) {
-      console.error('Error saving columns:', e)
-    }
-  }, 300) // 300ms debounce
-}, { deep: true })
-
 function getRow(name, field) {
   function getValue(value) {
     if (value && typeof value === 'object' && !Array.isArray(value)) {
@@ -386,8 +340,7 @@ function getRow(name, field) {
     }
     return { label: value }
   }
-  const row = rows.value?.find((row) => row.name == name)
-  return row ? getValue(row[field]) : { label: '' }
+  return getValue(rows.value?.find((row) => row.name == name)[field])
 }
 
 // Rows
@@ -410,8 +363,7 @@ const rows = computed(() => {
 function getGroupedByRows(listRows, groupByField, columns) {
   let groupedRows = []
 
-  const options = groupByField.options || []
-  options.forEach((option) => {
+  groupByField.options?.forEach((option) => {
     let filteredRows = []
 
     if (!option) {
@@ -431,7 +383,7 @@ function getGroupedByRows(listRows, groupByField, columns) {
     if (groupByField.fieldname == 'status') {
       groupDetail.icon = () =>
         h(IndicatorIcon, {
-          class: getPipelineStatus(option).color,
+          class: getPipelineStatus(option)?.color,
         })
     }
     groupedRows.push(groupDetail)
@@ -457,9 +409,7 @@ function parseRows(rows, columns = []) {
 
   return rows.map((pipeline) => {
     let _rows = {}
-    const rowFields = pipelines.value?.data.rows || []
-    
-    rowFields.forEach((row) => {
+    pipelines.value?.data.rows.forEach((row) => {
       _rows[row] = pipeline[row]
 
       let fieldType = columns?.find((col) => (col[key] || col.value) == row)?.[
@@ -490,7 +440,7 @@ function parseRows(rows, columns = []) {
         _rows[row] = {
           label: pipeline.pipeline_name,
           image: pipeline.image,
-          image_label: pipeline.lead_name || pipeline.pipeline_name,
+          image_label: pipeline.first_name,
         }
       } else if (row == 'organization') {
         _rows[row] = pipeline.organization
@@ -499,7 +449,28 @@ function parseRows(rows, columns = []) {
       } else if (row == 'status') {
         _rows[row] = {
           label: pipeline.status,
-          color: getPipelineStatus(pipeline.status).color,
+          color: getPipelineStatus(pipeline.status)?.color,
+        }
+      } else if (row == 'sla_status') {
+        let value = pipeline.sla_status
+        let tooltipText = value
+        let color =
+          pipeline.sla_status == 'Failed'
+            ? 'red'
+            : pipeline.sla_status == 'Fulfilled'
+              ? 'green'
+              : 'orange'
+        if (value == 'First Response Due') {
+          value = __(timeAgo(pipeline.response_by))
+          tooltipText = formatDate(pipeline.response_by)
+          if (new Date(pipeline.response_by) < new Date()) {
+            color = 'red'
+          }
+        }
+        _rows[row] = {
+          label: tooltipText,
+          value: value,
+          color: color,
         }
       } else if (row == 'pipeline_owner') {
         _rows[row] = {
@@ -518,32 +489,32 @@ function parseRows(rows, columns = []) {
           label: formatDate(pipeline[row]),
           timeAgo: __(timeAgo(pipeline[row])),
         }
-      } else if (['est_pipeline_value', 'total_deal_value'].includes(row)) {
+      } else if (
+        ['first_response_time', 'first_responded_on', 'response_by'].includes(
+          row,
+        )
+      ) {
+        let field = row == 'response_by' ? 'response_by' : 'first_responded_on'
         _rows[row] = {
-          label: pipeline[row] ? formatCurrency(pipeline[row]) : '',
-          value: pipeline[row]
+          label: pipeline[field] ? formatDate(pipeline[field]) : '',
+          timeAgo: pipeline[row]
+            ? row == 'first_response_time'
+              ? formatTime(pipeline[row])
+              : __(timeAgo(pipeline[row]))
+            : '',
         }
       }
     })
-    _rows['_email_count'] = pipeline._email_count || 0
-    _rows['_note_count'] = pipeline._note_count || 0
-    _rows['_task_count'] = pipeline._task_count || 0
-    _rows['_comment_count'] = pipeline._comment_count || 0
+    _rows['_email_count'] = pipeline._email_count
+    _rows['_note_count'] = pipeline._note_count
+    _rows['_task_count'] = pipeline._task_count
+    _rows['_comment_count'] = pipeline._comment_count
     return _rows
   })
 }
 
-function formatCurrency(value) {
-  if (!value) return ''
-  // Simple currency formatting
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD'
-  }).format(parseFloat(value))
-}
-
 function onNewClick(column) {
-  let column_field = pipelines.value.params?.column_field
+  let column_field = pipelines.value.params.column_field
 
   if (column_field) {
     defaults[column_field] = column.column.name

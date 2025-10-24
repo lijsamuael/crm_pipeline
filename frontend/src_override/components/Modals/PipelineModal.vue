@@ -26,7 +26,12 @@
           </div>
         </div>
         <div>
-          <FieldLayout v-if="tabs.data" :tabs="tabs.data" :data="pipeline.doc" />
+          <FieldLayout 
+            v-if="tabs.data" 
+            :tabs="tabs.data" 
+            :data="pipeline.doc" 
+            doctype="CRM Pipeline"
+          />
           <ErrorMessage class="mt-4" v-if="error" :message="__(error)" />
         </div>
       </div>
@@ -56,7 +61,7 @@ import { capture } from '@/telemetry'
 import { createResource } from 'frappe-ui'
 import { useOnboarding } from 'frappe-ui/frappe'
 import { useDocument } from '@/data/document'
-import { computed, onMounted, ref, nextTick } from 'vue'
+import { computed, onMounted, ref, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
 const props = defineProps({
@@ -75,175 +80,155 @@ const isPipelineCreating = ref(false)
 
 const { document: pipeline, triggerOnBeforeCreate } = useDocument('CRM Pipeline')
 
-// Get pipeline statuses
 const pipelineStatuses = computed(() => {
-  try {
-    let statuses = statusOptions('pipeline') || []
-    if (statuses.length === 0) {
-      // Fallback statuses if none are defined
-      statuses = [
-        { value: 'Open', label: 'Open' },
-        { value: 'In Progress', label: 'In Progress' },
-        { value: 'Completed', label: 'Completed' }
-      ]
-    }
-    return statuses
-  } catch (error) {
-    console.warn('Error getting pipeline statuses:', error)
-    return [
-      { value: 'Open', label: 'Open' },
-      { value: 'In Progress', label: 'In Progress' },
-      { value: 'Completed', label: 'Completed' }
-    ]
+  let statuses = statusOptions('pipeline')
+  if (!pipeline.doc.status) {
+    pipeline.doc.status = statuses?.[0]?.value
   }
+  return statuses
 })
+
+// Watch for changes in the pipeline doc to debug
+watch(() => pipeline.doc, (newDoc) => {
+  console.log('Pipeline doc updated:', newDoc)
+}, { deep: true, immediate: true })
 
 const tabs = createResource({
   url: 'crm.fcrm.doctype.crm_fields_layout.crm_fields_layout.get_fields_layout',
   cache: ['QuickEntry', 'CRM Pipeline'],
   params: { doctype: 'CRM Pipeline', type: 'Quick Entry' },
   auto: true,
-  transform: (tabs) => {
-    if (!tabs || !Array.isArray(tabs)) return tabs
+  transform: (_tabs) => {
+    if (!_tabs) return _tabs
     
-    return tabs.map((tab) => {
-      if (!tab.sections) return tab
-      
-      return {
-        ...tab,
-        sections: tab.sections.map((section) => {
-          if (!section.columns) return section
-          
-          return {
-            ...section,
-            columns: section.columns.map((column) => {
-              if (!column.fields) return column
-              
-              return {
-                ...column,
-                fields: column.fields.map((field) => {
-                  // Handle status field
-                  if (field.fieldname === 'status') {
-                    return {
-                      ...field,
-                      fieldtype: 'Select',
-                      options: pipelineStatuses.value,
-                      prefix: pipeline.doc.status ? getPipelineStatus(pipeline.doc.status)?.color : 'gray'
-                    }
-                  }
-                  
-                  // Handle table fields
-                  if (field.fieldtype === 'Table' && !pipeline.doc[field.fieldname]) {
-                    pipeline.doc[field.fieldname] = []
-                  }
-                  
-                  return field
-                })
+    // Properly transform the tabs without mutating the original
+    const transformedTabs = _tabs.map((tab) => {
+      const sections = tab.sections?.map((section) => {
+        const columns = section.columns?.map((column) => {
+          const fields = column.fields?.map((field) => {
+            // Initialize the field value in pipeline.doc if it doesn't exist
+            if (field.fieldname && !(field.fieldname in pipeline.doc)) {
+              // Set empty string for regular fields, empty array for table fields
+              if (field.fieldtype === 'Table') {
+                pipeline.doc[field.fieldname] = []
+              } else {
+                pipeline.doc[field.fieldname] = ''
               }
-            })
-          }
-        })
-      }
+            }
+
+            // Enhance status field with options
+            if (field.fieldname === 'status') {
+              return {
+                ...field,
+                fieldtype: 'Select',
+                options: pipelineStatuses.value,
+                prefix: getPipelineStatus(pipeline.doc.status)?.color || 'gray'
+              }
+            }
+
+            return field
+          }) || []
+          return { ...column, fields }
+        }) || []
+        return { ...section, columns }
+      }) || []
+      return { ...tab, sections }
     })
-  }
+    
+    return transformedTabs
+  },
 })
 
 const createPipeline = createResource({
   url: 'frappe.client.insert',
-  makeParams: (params) => params
 })
 
 async function createNewPipeline() {
-  // Reset error
-  error.value = null
+  console.log('Creating pipeline with final doc:', pipeline.doc)
   
-  // Validate required fields
+  // Ensure pipeline_name is set
   if (!pipeline.doc.pipeline_name) {
-    error.value = __('Pipeline Name is mandatory')
-    return
+    // Try to create pipeline_name from available fields
+    if (pipeline.doc.first_name || pipeline.doc.last_name) {
+      pipeline.doc.pipeline_name = [pipeline.doc.first_name, pipeline.doc.last_name]
+        .filter(Boolean)
+        .join(' ')
+    } else if (pipeline.doc.organization) {
+      pipeline.doc.pipeline_name = pipeline.doc.organization
+    } else {
+      pipeline.doc.pipeline_name = 'New Pipeline'
+    }
   }
   
-  if (!pipeline.doc.status) {
-    error.value = __('Status is required')
-    return
-  }
-
-  // Validate email if provided
-  if (pipeline.doc.email && !isValidEmail(pipeline.doc.email)) {
-    error.value = __('Invalid Email')
-    return
-  }
-
-  // Validate website format
   if (pipeline.doc.website && !pipeline.doc.website.startsWith('http')) {
     pipeline.doc.website = 'https://' + pipeline.doc.website
   }
 
-  // Validate numeric fields
-  if (pipeline.doc.annual_revenue) {
-    const revenue = parseFloat(pipeline.doc.annual_revenue.toString().replace(/,/g, ''))
-    if (isNaN(revenue)) {
-      error.value = __('Annual Revenue should be a number')
-      return
-    }
-    pipeline.doc.annual_revenue = revenue
-  }
-
-  // Validate mobile number
-  if (pipeline.doc.mobile_no && !isValidPhoneNumber(pipeline.doc.mobile_no)) {
-    error.value = __('Mobile No should be a valid number')
-    return
-  }
-
-  // Trigger any before-create hooks
   await triggerOnBeforeCreate?.()
 
-  isPipelineCreating.value = true
-
-  try {
-    const result = await createPipeline.submit({
+  createPipeline.submit(
+    {
       doc: {
         doctype: 'CRM Pipeline',
         ...pipeline.doc,
-      }
-    })
-
-    capture('pipeline_created')
-    isPipelineCreating.value = false
-    show.value = false
-    
-    // Navigate to the new pipeline
-    router.push({ name: 'Pipeline', params: { pipelineId: result.name } })
-    
-    // Update onboarding
-    updateOnboardingStep('create_first_pipeline', true, false, () => {
-      localStorage.setItem('firstPipeline' + user, result.name)
-    })
-    
-  } catch (err) {
-    isPipelineCreating.value = false
-    console.error('Error creating pipeline:', err)
-    
-    if (err.messages) {
-      error.value = err.messages.join('\n')
-    } else if (err.message) {
-      error.value = err.message
-    } else {
-      error.value = __('Failed to create pipeline. Please try again.')
-    }
-  }
-}
-
-// Helper functions for validation
-function isValidEmail(email) {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-  return emailRegex.test(email)
-}
-
-function isValidPhoneNumber(phone) {
-  // Basic phone validation - allows numbers, spaces, hyphens, parentheses, and +
-  const phoneRegex = /^[\d\s\-+()]+$/
-  return phoneRegex.test(phone)
+      },
+    },
+    {
+      validate() {
+        error.value = null
+        
+        // Check for pipeline_name OR first_name as mandatory
+        if (!pipeline.doc.pipeline_name && !pipeline.doc.first_name) {
+          error.value = __('Pipeline Name or First Name is mandatory')
+          return error.value
+        }
+        
+        if (pipeline.doc.annual_revenue) {
+          if (typeof pipeline.doc.annual_revenue === 'string') {
+            pipeline.doc.annual_revenue = pipeline.doc.annual_revenue.replace(/,/g, '')
+          } else if (isNaN(pipeline.doc.annual_revenue)) {
+            error.value = __('Annual Revenue should be a number')
+            return error.value
+          }
+        }
+        if (
+          pipeline.doc.mobile_no &&
+          isNaN(pipeline.doc.mobile_no.replace(/[-+() ]/g, ''))
+        ) {
+          error.value = __('Mobile No should be a number')
+          return error.value
+        }
+        if (pipeline.doc.email && !pipeline.doc.email.includes('@')) {
+          error.value = __('Invalid Email')
+          return error.value
+        }
+        if (!pipeline.doc.status) {
+          error.value = __('Status is required')
+          return error.value
+        }
+        isPipelineCreating.value = true
+      },
+      onSuccess(data) {
+        console.log('Pipeline created successfully:', data)
+        capture('pipeline_created')
+        isPipelineCreating.value = false
+        show.value = false
+        router.push({ name: 'Pipeline', params: { pipelineId: data.name } })
+        updateOnboardingStep('create_first_pipeline', true, false, () => {
+          localStorage.setItem('firstPipeline' + user, data.name)
+        })
+      },
+      onError(err) {
+        console.error('Error creating pipeline:', err)
+        isPipelineCreating.value = false
+        if (!err.messages) {
+          error.value = err.message
+          return
+        }
+        error.value = err.messages.join('\n')
+      },
+    },
+  )
 }
 
 function openQuickEntryModal() {
@@ -253,23 +238,19 @@ function openQuickEntryModal() {
 }
 
 onMounted(() => {
-  // Initialize pipeline with default values
+  // Initialize pipeline document with defaults
   pipeline.doc = { 
     no_of_employees: '1-10',
-    status: pipelineStatuses.value[0]?.value || 'Open'
+    ...props.defaults 
   }
-  
-  // Apply any provided defaults
-  Object.assign(pipeline.doc, props.defaults)
 
-  // Set default pipeline owner
   if (!pipeline.doc?.pipeline_owner) {
     pipeline.doc.pipeline_owner = getUser().name
   }
-  
-  // Ensure status is set
   if (!pipeline.doc?.status && pipelineStatuses.value[0]?.value) {
     pipeline.doc.status = pipelineStatuses.value[0].value
   }
+  
+  console.log('Pipeline modal mounted with initial doc:', pipeline.doc)
 })
 </script>

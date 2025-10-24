@@ -37,7 +37,7 @@
       <Button
         :label="__('Convert to Lead')"
         variant="solid"
-        @click="createLead"
+        @click="showConvertToDealModal = true"
       />
       <Button
         :label="__('Convert to Pipeline')"
@@ -308,6 +308,8 @@ const createPipeline = () => {
     })
 }
 const showFilesUploader = ref(false)
+const showConvertToDealModal = ref(false)
+
 
 const { triggerOnChange, assignees, document, scripts, error } = useDocument(
   'CRM Lead',
