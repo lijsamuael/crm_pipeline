@@ -54,7 +54,7 @@
     </template>
   </LayoutHeader>
   <div v-if="doc.name" class="flex h-full overflow-hidden">
-    <Tabs as="div" v-model="tabIndex" :tabs="tabs">
+    <Tabs as="div" v-model="tabIndex" :tabs="filteredTabs">
       <template #tab-panel>
         <!-- Activities Tab -->
         <Activities
@@ -69,10 +69,26 @@
           @afterSave="reloadAssignees"
         />
 
-        <!-- Deal Tagging Tab -->
-        <div v-else-if="currentTab?.name === 'DealTagging'" class="p-5">
+        <!-- Deals Tab -->
+        <div v-else-if="currentTab?.name === 'Deals'" class="p-5">
+          <!-- Deals Summary -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+              <div class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">{{ __('Total Deals') }}</div>
+              <div class="text-2xl font-bold text-gray-900 dark:text-gray-100">{{ dealsSummary.totalDeals }}</div>
+            </div>
+            <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+              <div class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">{{ __('Total Value') }}</div>
+              <div class="text-2xl font-bold text-green-600 dark:text-green-400">{{ formatCurrency(dealsSummary.totalValue) }}</div>
+            </div>
+            <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+              <div class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">{{ __('Expected Sales') }}</div>
+              <div class="text-2xl font-bold text-blue-600 dark:text-blue-400">{{ formatCurrency(dealsSummary.expectedSales) }}</div>
+            </div>
+          </div>
+
           <div class="flex items-center justify-between mb-4">
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ __('Deal Tagging') }}</h3>
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ __('Deals') }}</h3>
             <Button
               :label="__('Add New Deal')"
               variant="solid"
@@ -140,12 +156,6 @@
                   </td>
                   <td class="px-4 py-3">
                     <div class="flex gap-2">
-                      <!-- <Button
-                        :label="__('Edit')"
-                        variant="ghost"
-                        icon="edit"
-                        @click="editDeal(deal)"
-                      /> -->
                       <Button
                         :label="__('Delete')"
                         variant="subtle"
@@ -172,10 +182,135 @@
           </div>
         </div>
 
-        <!-- Logs Tab -->
-        <div v-else-if="currentTab?.name === 'Logs'" class="p-5">
+        <!-- Pipelines Tab -->
+        <div v-else-if="currentTab?.name === 'Pipelines'" class="p-5">
+          <!-- Pipelines Summary -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+              <div class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">{{ __('Total Pipelines') }}</div>
+              <div class="text-2xl font-bold text-gray-900 dark:text-gray-100">{{ pipelinesSummary.totalPipelines }}</div>
+            </div>
+            <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+              <div class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">{{ __('Total Deals') }}</div>
+              <div class="text-2xl font-bold text-green-600 dark:text-green-400">{{ pipelinesSummary.totalDeals }}</div>
+            </div>
+            <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+              <div class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">{{ __('Total Sales') }}</div>
+              <div class="text-2xl font-bold text-blue-600 dark:text-blue-400">{{ formatCurrency(pipelinesSummary.totalSales) }}</div>
+            </div>
+          </div>
+
           <div class="flex items-center justify-between mb-4">
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ __('Status Logs') }}</h3>
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ __('Child Pipelines') }}</h3>
+            <Button
+              :label="__('Add New Pipeline')"
+              variant="solid"
+              icon="plus"
+              @click="showAddPipelineModal = true"
+            />
+          </div>
+          
+          <!-- Add Pipeline Modal -->
+          <Dialog v-model="showAddPipelineModal" :options="{ title: editingPipeline ? __('Edit Pipeline') : __('Add New Pipeline'), size: '3xl' }">
+            <template #body>
+              <div class="p-4">
+                <FieldLayout 
+                  v-if="pipelineTabs.data" 
+                  :tabs="pipelineTabs.data" 
+                  :data="newPipeline.doc" 
+                  doctype="CRM Master Pipeline Child"
+                />
+                <div class="mt-4 flex justify-end gap-2">
+                  <Button
+                    :label="__('Cancel')"
+                    variant="outline"
+                    @click="cancelAddPipeline"
+                  />
+                  <Button
+                    :label="editingPipeline ? __('Update Pipeline') : __('Save Pipeline')"
+                    variant="solid"
+                    theme="green"
+                    :loading="isAddingPipeline"
+                    @click="savePipeline"
+                  />
+                </div>
+              </div>
+            </template>
+          </Dialog>
+          
+          <div class="border rounded-lg overflow-hidden border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+            <table class="w-full">
+              <thead class="bg-gray-50 dark:bg-gray-700">
+                <tr>
+                  <th class="px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-300">{{ __('Pipeline Name') }}</th>
+                  <th class="px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-300">{{ __('Pipeline Owner') }}</th>
+                  <th class="px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-300">{{ __('Status') }}</th>
+                  <th class="px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-300">{{ __('Total Deals') }}</th>
+                  <th class="px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-300">{{ __('Total Value') }}</th>
+                  <th class="px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-300">{{ __('Actions') }}</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-200 dark:divide-gray-600">
+                <tr 
+                  v-for="pipeline in childPipelinesWithDetails" 
+                  :key="pipeline.name" 
+                  class="hover:bg-gray-50 dark:hover:bg-gray-700"
+                >
+                  <td class="px-4 py-3 text-gray-900 dark:text-gray-100">
+                    {{ pipeline.pipeline_name }}
+                  </td>
+                  <td class="px-4 py-3 text-gray-900 dark:text-gray-100">
+                    {{ pipeline.pipeline_owner }}
+                  </td>
+                  <td class="px-4 py-3 text-gray-900 dark:text-gray-100">
+                    <Badge :variant="getPipelineStatus(pipeline.status).variant" :theme="getPipelineStatus(pipeline.status).theme">
+                      {{ pipeline.status }}
+                    </Badge>
+                  </td>
+                  <td class="px-4 py-3 text-gray-900 dark:text-gray-100">
+                    {{ pipeline.total_deals || 0 }}
+                  </td>
+                  <td class="px-4 py-3 text-gray-900 dark:text-gray-100">
+                    {{ formatCurrency(pipeline.total_value || 0) }}
+                  </td>
+                  <td class="px-4 py-3">
+                    <div class="flex gap-2">
+                      <!-- <Button
+                        :label="__('View')"
+                        variant="ghost"
+                        icon="external-link"
+                        @click="viewPipeline(pipeline.pipeline)"
+                      /> -->
+                      <Button
+                        :label="__('Delete')"
+                        variant="subtle"
+                        theme="red"
+                        icon="trash-2"
+                        @click="deletePipeline(pipeline.name)"
+                      />
+                    </div>
+                  </td>
+                </tr>
+                <tr v-if="childPipelines.length === 0">
+                  <td colspan="6" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                    {{ __('No child pipelines linked to this master pipeline.') }}
+                    <Button
+                      :label="__('Add your first pipeline')"
+                      variant="ghost"
+                      class="mt-2"
+                      @click="showAddPipelineModal = true"
+                    />
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Status Tab -->
+        <div v-else-if="currentTab?.name === 'Status'" class="p-5">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ __('Status') }}</h3>
           </div>
           
           <div class="border rounded-lg overflow-hidden border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
@@ -343,7 +478,7 @@
                   variant="subtle"
                   theme="red"
                   icon="trash-2"
-                  @click="deletePipeline"
+                  @click="deleteCurrentPipeline"
                 />
               </div>
               <ErrorMessage :message="__(error)" />
@@ -485,9 +620,17 @@ const showAddDealModal = ref(false)
 const isAddingDeal = ref(false)
 const editingDeal = ref(null)
 
+// Pipeline modal state
+const showAddPipelineModal = ref(false)
+const isAddingPipeline = ref(false)
+const editingPipeline = ref(null)
+
 // Local state for logs
 const localLogs = ref([])
 const hasChanges = ref(false)
+
+// Reactive variable for child pipelines with details
+const childPipelinesWithDetailsData = ref([])
 
 const { triggerOnChange, assignees, document, scripts, error } = useDocument(
   'CRM Pipeline',
@@ -496,9 +639,64 @@ const { triggerOnChange, assignees, document, scripts, error } = useDocument(
 
 const doc = computed(() => document.doc || {})
 
-// Get deals from child table - FIXED: Check for deals child table
+// Get deals from child table
 const childDeals = computed(() => {
   return doc.value.deals || []
+})
+
+// Get child pipelines from sub_pipelines child table
+const childPipelines = computed(() => {
+  return doc.value.sub_pipelines || []
+})
+
+// Get child pipelines with deal details
+const childPipelinesWithDetails = computed(() => {
+  return childPipelinesWithDetailsData.value.length > 0 
+    ? childPipelinesWithDetailsData.value 
+    : childPipelines.value.map(pipeline => ({
+        ...pipeline,
+        total_deals: 0,
+        total_value: 0
+      }))
+})
+
+// Deals summary calculations
+const dealsSummary = computed(() => {
+  const deals = childDeals.value
+  const totalDeals = deals.length
+  const totalValue = deals.reduce((sum, deal) => sum + (parseFloat(deal.deal_value) || 0), 0)
+  const expectedSales = deals.reduce((sum, deal) => {
+    const value = parseFloat(deal.deal_value) || 0
+    const probability = parseFloat(deal.probability) || 0
+    return sum + (value * (probability / 100))
+  }, 0)
+  
+  return {
+    totalDeals,
+    totalValue,
+    expectedSales
+  }
+})
+
+// Pipelines summary calculations - now includes deals from all child pipelines
+const pipelinesSummary = computed(() => {
+  const pipelines = childPipelinesWithDetails.value
+  const totalPipelines = pipelines.length
+  
+  // Calculate total deals and sales across all child pipelines
+  let totalDeals = 0
+  let totalSales = 0
+  
+  pipelines.forEach(pipeline => {
+    totalDeals += pipeline.total_deals || 0
+    totalSales += parseFloat(pipeline.total_value) || 0
+  })
+  
+  return {
+    totalPipelines,
+    totalDeals,
+    totalSales
+  }
 })
 
 // Resource for deal field layout
@@ -512,14 +710,52 @@ const dealTabs = createResource({
   auto: false,
 })
 
+// Resource for pipeline field layout (using CRM Master Pipeline Child)
+const pipelineTabs = createResource({
+  url: 'crm.fcrm.doctype.crm_fields_layout.crm_fields_layout.get_fields_layout',
+  cache: ['QuickEntry', 'CRM Master Pipeline Child'],
+  params: { 
+    doctype: 'CRM Master Pipeline Child', 
+    type: 'Quick Entry'
+  },
+  auto: false,
+})
+
 // New deal document
 const { document: newDeal } = useDocument('CRM Pipeline Items')
 
-// Watch for document changes to initialize local state
-watch(doc, (newDoc) => {
+// New pipeline document (using CRM Master Pipeline Child)
+const { document: newPipeline } = useDocument('CRM Master Pipeline Child')
+
+// Load child pipelines with deals data
+async function loadChildPipelinesWithDeals() {
+  try {
+    const result = await call('crm_pipeline.api.get_child_pipelines_with_deals', {
+      master_pipeline: props.pipelineId
+    })
+    
+    if (result && result.success) {
+      childPipelinesWithDetailsData.value = result.child_pipelines || []
+    } else {
+      console.error('Failed to load child pipelines with deals:', result?.error)
+      childPipelinesWithDetailsData.value = []
+    }
+  } catch (error) {
+    console.error('Error loading child pipelines with deals:', error)
+    childPipelinesWithDetailsData.value = []
+  }
+}
+
+// Watch for document changes to initialize local state and reload pipeline details
+watch(doc, async (newDoc) => {
   if (newDoc) {
     localLogs.value = newDoc.logs ? JSON.parse(JSON.stringify(newDoc.logs)) : []
     hasChanges.value = false
+    
+    // Load child pipelines with deal details when document changes
+    if (newDoc.pipeline_type === 'Master Pipeline') {
+      await loadChildPipelinesWithDeals()
+    }
   }
 }, { immediate: true, deep: true })
 
@@ -530,6 +766,16 @@ watch(showAddDealModal, (show) => {
     newDeal.doc = {}
     // Load the custom field layout
     dealTabs.reload()
+  }
+})
+
+// Watch for pipeline modal opening to reset form
+watch(showAddPipelineModal, (show) => {
+  if (show && !editingPipeline.value) {
+    // Reset for new pipeline
+    newPipeline.doc = {}
+    // Load the custom field layout
+    pipelineTabs.reload()
   }
 })
 
@@ -547,9 +793,9 @@ const statusOptions = computed(() => {
 })
 
 // Current active tab
-const currentTab = computed(() => tabs.value[tabIndex.value])
+const currentTab = computed(() => filteredTabs.value[tabIndex.value])
 
-// Tabs configuration with new tabs
+// Tabs configuration with updated names and new Pipelines tab
 const tabs = computed(() => {
   let tabOptions = [
     {
@@ -558,13 +804,20 @@ const tabs = computed(() => {
       icon: ActivityIcon,
     },
     {
-      name: 'DealTagging',
-      label: __('Deal Tagging'),
+      name: 'Deals',
+      label: __('Deals'),
       icon: DetailsIcon,
+      condition: () => doc.value.pipeline_type === 'Default'
     },
     {
-      name: 'Logs',
-      label: __('Status Logs'),
+      name: 'Pipelines',
+      label: __('Pipelines'),
+      icon: DetailsIcon,
+      condition: () => doc.value.pipeline_type === 'Master Pipeline'
+    },
+    {
+      name: 'Status',
+      label: __('Status'),
       icon: ActivityIcon,
     },
     {
@@ -602,6 +855,11 @@ const tabs = computed(() => {
   return tabOptions.filter((tab) => (tab.condition ? tab.condition() : true))
 })
 
+// Filtered tabs based on conditions
+const filteredTabs = computed(() => {
+  return tabs.value.filter(tab => tab.condition ? tab.condition() : true)
+})
+
 // Check if there are any changes
 function checkForChanges() {
   const originalLogs = doc.value.logs ? JSON.parse(JSON.stringify(doc.value.logs)) : []
@@ -610,7 +868,6 @@ function checkForChanges() {
   hasChanges.value = logsChanged
 }
 
-// Save deal function
 // Save deal function
 async function saveDeal() {
   try {
@@ -674,12 +931,81 @@ async function saveDeal() {
   }
 }
 
+// Save pipeline function (using same logic as deals)
+async function savePipeline() {
+  try {
+    isAddingPipeline.value = true
+    
+    // Validate required fields
+    if (!newPipeline.doc.pipeline_name) {
+      toast.error(__('Pipeline Name is required'))
+      return
+    }
+
+    console.log('Sending pipeline data:', newPipeline.doc)
+
+    // Prepare pipeline data
+    const pipelineData = {
+      pipeline_name: newPipeline.doc.pipeline_name,
+      pipeline_owner: newPipeline.doc.pipeline_owner,
+      status: newPipeline.doc.status || 'Active',
+      // Add any other fields from your form
+      ...newPipeline.doc
+    }
+
+    // Remove parent fields as they're not needed in the API
+    delete pipelineData.parent
+    delete pipelineData.parenttype
+    delete pipelineData.parentfield
+
+    console.log('Final pipeline data to send:', pipelineData)
+
+    // Call the link_pipeline_to_master API (same pattern as deals)
+    const result = await call('crm_pipeline.api.link_pipeline_to_master', 
+      {
+        pipeline: props.pipelineId,
+        pipeline_data: pipelineData
+      }
+    )
+
+    console.log('Link pipeline response:', result)
+
+    if (result && result.success) {
+      toast.success(__('Pipeline added successfully'))
+      
+      // Close modal and reset
+      showAddPipelineModal.value = false
+      editingPipeline.value = null
+      newPipeline.doc = {}
+      
+      // Reload the pipeline document to refresh the child table
+      document.reload()
+      // Also reload the child pipelines with deals data
+      await loadChildPipelinesWithDeals()
+    } else {
+      throw new Error(result?.error || __('Failed to add pipeline'))
+    }
+    
+  } catch (error) {
+    console.error('Error saving pipeline:', error)
+    toast.error(__('Failed to save pipeline: {0}', [error.message]))
+  } finally {
+    isAddingPipeline.value = false
+  }
+}
 
 // Cancel adding/editing deal
 function cancelAddDeal() {
   showAddDealModal.value = false
   editingDeal.value = null
   newDeal.doc = {}
+}
+
+// Cancel adding/editing pipeline
+function cancelAddPipeline() {
+  showAddPipelineModal.value = false
+  editingPipeline.value = null
+  newPipeline.doc = {}
 }
 
 // Delete deal function
@@ -706,6 +1032,37 @@ async function deleteDeal(dealName) {
   }
 }
 
+// Delete pipeline function (using same logic as deals)
+async function deletePipeline(pipelineName) {
+  try {
+    
+      // Call API to delete the pipeline from child table
+      const result = await call('crm_pipeline.api.unlink_pipeline_from_master', {
+        pipeline: props.pipelineId,
+        pipeline_name: pipelineName
+      })
+
+      if (result && result.success) {
+        toast.success(__('Pipeline deleted successfully'))
+        
+        // Reload the pipeline document to refresh the child table
+        document.reload()
+        // Also reload the child pipelines with deals data
+        await loadChildPipelinesWithDeals()
+      } else {
+        throw new Error(result?.error || __('Failed to delete pipeline'))
+      }
+  } catch (error) {
+    console.error('Error deleting pipeline:', error)
+    toast.error(__('Failed to delete pipeline: {0}', [error.message]))
+  }
+}
+
+// View pipeline function
+function viewPipeline(pipelineName) {
+  router.push({ name: 'Pipeline', params: { pipelineId: pipelineName } })
+}
+
 // Format currency
 function formatCurrency(value) {
   if (!value) return '0.00'
@@ -714,8 +1071,6 @@ function formatCurrency(value) {
     maximumFractionDigits: 2
   })
 }
-
-
 
 // Logs Functions
 function removeLogRow(index) {
@@ -822,7 +1177,7 @@ watch(
         toast,
         updateField,
         createToast: toast.create,
-        deleteDoc: deletePipeline,
+        deleteDoc: deleteCurrentPipeline,
         call,
       })
       document._actions = s.actions || []
@@ -860,7 +1215,7 @@ function updateField(name, value) {
   })
 }
 
-function deletePipeline() {
+function deleteCurrentPipeline() {
   showDeleteLinkedDocModal.value = true
 }
 

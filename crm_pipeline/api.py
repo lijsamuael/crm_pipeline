@@ -465,3 +465,151 @@ def get_data(doctype, filters=None, order_by=None, **kwargs):
             "page_length_count": 20,
             "fields": []  # Empty fields array as fallback
         }
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+@frappe.whitelist()
+def link_pipeline_to_master(pipeline, pipeline_data):
+    """
+    Simple function to link pipeline to master pipeline's sub_pipelines child table
+    Uses same logic as link_deal_to_pipeline
+    """
+    try:
+        # Get pipeline document
+        pipeline_doc = frappe.get_doc("CRM Pipeline", pipeline)
+        
+        # Parse pipeline data if string
+        if isinstance(pipeline_data, str):
+            pipeline_data = frappe.parse_json(pipeline_data)
+        
+        print("Received pipeline data:", pipeline_data)  # Debug log
+        
+        # Link pipeline to master pipeline child table using the data directly
+        if hasattr(pipeline_doc, 'sub_pipelines'):
+            # Create the child table row with all incoming data
+            new_pipeline = pipeline_doc.append("sub_pipelines", pipeline_data)
+            
+            pipeline_doc.save(ignore_permissions=True)
+            frappe.db.commit()
+
+        return {"success": True, "message": "Pipeline linked to master pipeline successfully.", "data": pipeline_data}
+
+    except Exception as e:
+        frappe.log_error(f"Error linking pipeline to master: {str(e)}")
+        return {"success": False, "error": str(e)}
+
+@frappe.whitelist()
+def unlink_pipeline_from_master(pipeline, pipeline_name):
+    """
+    Remove pipeline from master pipeline's sub_pipelines child table
+    Uses same logic as unlink_deal_from_pipeline
+    """
+    try:
+        # Get pipeline document
+        pipeline_doc = frappe.get_doc("CRM Pipeline", pipeline)
+        
+        # Remove the pipeline from child table
+        if hasattr(pipeline_doc, 'sub_pipelines'):
+            # Find and remove the pipeline by name
+            pipeline_doc.sub_pipelines = [p for p in pipeline_doc.sub_pipelines if p.name != pipeline_name]
+            
+            pipeline_doc.save(ignore_permissions=True)
+            frappe.db.commit()
+            
+        return {"success": True, "message": "Pipeline unlinked from master pipeline"}
+        
+    except Exception as e:
+        frappe.log_error(f"Error unlinking pipeline from master: {str(e)}")
+        return {"success": False, "error": str(e)}
+    
+    
+
+@frappe.whitelist()
+def get_child_pipelines_with_deals(master_pipeline):
+    """
+    Get all child pipelines with their deal counts and total values
+    """
+    try:
+        # Get the master pipeline document
+        master_doc = frappe.get_doc("CRM Pipeline", master_pipeline)
+        child_pipelines = []
+        
+        # Get all child pipelines from sub_pipelines child table
+        for child in master_doc.sub_pipelines:
+            pipeline_name = child.pipeline_name
+            
+            # Get the child pipeline document to access its deals
+            try:
+                child_pipeline_doc = frappe.get_doc("CRM Pipeline", pipeline_name)
+                
+                # Count deals and calculate total value from the child pipeline's deals table
+                total_deals = len(child_pipeline_doc.deals) if hasattr(child_pipeline_doc, 'deals') else 0
+                total_value = 0
+                
+                if hasattr(child_pipeline_doc, 'deals'):
+                    for deal in child_pipeline_doc.deals:
+                        total_value += float(deal.deal_value or 0)
+                
+                child_pipelines.append({
+                    "name": child.name,
+                    "pipeline_name": child.pipeline_name,
+                    "pipeline_owner": child.pipeline_owner,
+                    "status": child.status,
+                    "creation": child.creation,
+                    "total_deals": total_deals,
+                    "total_value": total_value
+                })
+                
+            except Exception as e:
+                # If child pipeline doesn't exist or other error, include basic info
+                frappe.log_error(f"Error processing child pipeline {pipeline_name}: {str(e)}")
+                child_pipelines.append({
+                    "name": child.name,
+                    "pipeline": pipeline_name,
+                    "pipeline_name": child.pipeline_name,
+                    "pipeline_owner": child.pipeline_owner,
+                    "status": child.status,
+                    "creation": child.creation,
+                    "total_deals": 0,
+                    "total_value": 0
+                })
+        
+        return {
+            "success": True,
+            "child_pipelines": child_pipelines
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Error getting child pipelines with deals: {str(e)}")
+        return {
+            "success": False,
+            "error": _("Failed to get child pipelines with deals: {0}").format(str(e))
+        }
