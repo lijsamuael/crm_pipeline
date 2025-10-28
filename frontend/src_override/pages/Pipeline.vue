@@ -37,6 +37,7 @@
       </Dropdown>
 
       <Button
+         v-if="doc.pipeline_type === 'Default'"
         :label="__('Convert to Deal')"
         variant="solid"
         @click="showConvertToDealModal = true"
