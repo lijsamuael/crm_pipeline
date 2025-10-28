@@ -26,10 +26,34 @@
           </div>
         </div>
         <div>
-          <FieldLayout 
-            v-if="tabs.data" 
-            :tabs="tabs.data" 
-            :data="pipeline.doc" 
+          <div
+            v-if="hasOrganizationSections || hasContactSections"
+            class="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-3"
+          >
+            <div
+              v-if="hasOrganizationSections"
+              class="flex items-center gap-3 text-sm text-ink-gray-5"
+            >
+              <div>{{ __('Choose Existing Organization') }}</div>
+              <Switch v-model="chooseExistingOrganization" />
+            </div>
+            <div
+              v-if="hasContactSections"
+              class="flex items-center gap-3 text-sm text-ink-gray-5"
+            >
+              <div>{{ __('Choose Existing Contact') }}</div>
+              <Switch v-model="chooseExistingContact" />
+            </div>
+          </div>
+          <div
+            v-if="hasOrganizationSections || hasContactSections"
+            class="h-px w-full border-t my-5"
+          />
+          <FieldLayout
+            ref="fieldLayoutRef"
+            v-if="tabs.data?.length"
+            :tabs="tabs.data"
+            :data="pipeline.doc"
             doctype="CRM Pipeline"
           />
           <ErrorMessage class="mt-4" v-if="error" :message="__(error)" />
@@ -58,7 +82,7 @@ import { sessionStore } from '@/stores/session'
 import { isMobileView } from '@/composables/settings'
 import { showQuickEntryModal, quickEntryProps } from '@/composables/modals'
 import { capture } from '@/telemetry'
-import { createResource } from 'frappe-ui'
+import { Switch, createResource } from 'frappe-ui'
 import { useOnboarding } from 'frappe-ui/frappe'
 import { useDocument } from '@/data/document'
 import { computed, onMounted, ref, nextTick, watch } from 'vue'
@@ -80,6 +104,39 @@ const isPipelineCreating = ref(false)
 
 const { document: pipeline, triggerOnBeforeCreate } = useDocument('CRM Pipeline')
 
+const hasOrganizationSections = ref(true)
+const hasContactSections = ref(true)
+
+const chooseExistingContact = ref(false)
+const chooseExistingOrganization = ref(false)
+const fieldLayoutRef = ref(null)
+
+watch(
+  [chooseExistingOrganization, chooseExistingContact],
+  ([organization, contact]) => {
+    if (!tabs.data) return
+    
+    tabs.data.forEach((tab) => {
+      tab.sections.forEach((section) => {
+        if (section.name === 'organization_section') {
+          section.hidden = !organization
+        } else if (section.name === 'organization_details_section') {
+          section.hidden = organization
+        } else if (section.name === 'contact_section') {
+          section.hidden = !contact
+        } else if (section.name === 'contact_details_section') {
+          section.hidden = contact
+        }
+      })
+    })
+
+    // Set pipeline_type to "Default" when selecting existing contact or organization
+    if (organization || contact) {
+      pipeline.doc.pipeline_type = 'Default'
+    }
+  },
+)
+
 const pipelineStatuses = computed(() => {
   let statuses = statusOptions('pipeline')
   if (!pipeline.doc.status) {
@@ -88,11 +145,6 @@ const pipelineStatuses = computed(() => {
   return statuses
 })
 
-// Watch for changes in the pipeline doc to debug
-watch(() => pipeline.doc, (newDoc) => {
-  console.log('Pipeline doc updated:', newDoc)
-}, { deep: true, immediate: true })
-
 const tabs = createResource({
   url: 'crm.fcrm.doctype.crm_fields_layout.crm_fields_layout.get_fields_layout',
   cache: ['QuickEntry', 'CRM Pipeline'],
@@ -100,6 +152,9 @@ const tabs = createResource({
   auto: true,
   transform: (_tabs) => {
     if (!_tabs) return _tabs
+    
+    hasOrganizationSections.value = false
+    hasContactSections.value = false
     
     // Properly transform the tabs without mutating the original
     const transformedTabs = _tabs.map((tab) => {
@@ -114,6 +169,21 @@ const tabs = createResource({
               } else {
                 pipeline.doc[field.fieldname] = ''
               }
+            }
+
+            // Check for organization and contact sections
+            if (
+              ['organization_section', 'organization_details_section'].includes(
+                section.name,
+              )
+            ) {
+              hasOrganizationSections.value = true
+            } else if (
+              ['contact_section', 'contact_details_section'].includes(
+                section.name,
+              )
+            ) {
+              hasContactSections.value = true
             }
 
             // Enhance status field with options
@@ -162,6 +232,16 @@ async function createNewPipeline() {
   
   if (pipeline.doc.website && !pipeline.doc.website.startsWith('http')) {
     pipeline.doc.website = 'https://' + pipeline.doc.website
+  }
+
+  // Handle existing contact/organization logic
+  if (chooseExistingContact.value) {
+    pipeline.doc['first_name'] = null
+    pipeline.doc['last_name'] = null
+    pipeline.doc['email'] = null
+    pipeline.doc['mobile_no'] = null
+  } else {
+    pipeline.doc['contact'] = null
   }
 
   await triggerOnBeforeCreate?.()
@@ -249,6 +329,11 @@ onMounted(() => {
   }
   if (!pipeline.doc?.status && pipelineStatuses.value[0]?.value) {
     pipeline.doc.status = pipelineStatuses.value[0].value
+  }
+
+  // Set default pipeline_type if not already set
+  if (!pipeline.doc?.pipeline_type) {
+    pipeline.doc.pipeline_type = 'Default'
   }
   
   console.log('Pipeline modal mounted with initial doc:', pipeline.doc)
