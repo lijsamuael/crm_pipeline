@@ -164,6 +164,7 @@ const isCollapsed = computed(() => !sidebarOpened.value)
 
 const links = [
   { label: 'Leads', icon: LeadsIcon, to: 'Leads' },
+  { label: 'Pipelines', icon: LeadsIcon, to: 'Pipelines' },
   { label: 'Deals', icon: DealsIcon, to: 'Deals' },
   { label: 'Contacts', icon: ContactsIcon, to: 'Contacts' },
   { label: 'Organizations', icon: OrganizationsIcon, to: 'Organizations' },
