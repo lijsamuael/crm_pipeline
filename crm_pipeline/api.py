@@ -1,3 +1,4 @@
+import json
 import frappe
 from frappe import _
 from frappe.utils import now_datetime
@@ -613,3 +614,279 @@ def get_child_pipelines_with_deals(master_pipeline):
             "success": False,
             "error": _("Failed to get child pipelines with deals: {0}").format(str(e))
         }
+        
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+@frappe.whitelist()
+def get_grid_layout(doctype):
+    """
+    Get the grid layout for a specific doctype and return in table format
+    """
+    try:
+        # Get the raw layout data
+        layout_data = []
+        if frappe.db.exists("CRM Fields Layout", {"dt": doctype, "type": "Grid Row"}):
+            layout = frappe.get_doc("CRM Fields Layout", {"dt": doctype, "type": "Grid Row"})
+            if layout and layout.layout:
+                layout_data = json.loads(layout.layout)
+        
+        
+        # Log the raw layout data for debugging
+        frappe.logger().info(f"Raw grid layout for {doctype}: {json.dumps(layout_data, indent=2)}")
+        
+        # Initialize result structure
+        result = {
+            "success": True,
+            "columns": [],
+            "field_metadata": {},
+            "raw_layout": layout_data
+        }
+        
+        # Extract columns from the layout data
+        columns = []
+        field_metadata = {}
+        
+        if isinstance(layout_data, list):
+            # Handle your JSON structure: [{"name": "Deal", "field": "deal"}, ...]
+            for item in layout_data:
+                if isinstance(item, dict) and "field" in item:
+                    fieldname = item["field"]
+                    label = item.get("name", fieldname)
+                    
+                    # Get field metadata from doctype
+                    field_meta = frappe.get_meta(doctype).get_field(fieldname)
+                    
+                    column_data = {
+                        "fieldname": fieldname,
+                        "label": label,
+                        "fieldtype": field_meta.fieldtype if field_meta else "Data",
+                        "options": getattr(field_meta, 'options', None) if field_meta else None,
+                        "width": getattr(field_meta, 'width', None) if field_meta else None,
+                        "read_only": getattr(field_meta, 'read_only', 0) if field_meta else 0,
+                        "hidden": getattr(field_meta, 'hidden', 0) if field_meta else 0,
+                        "reqd": getattr(field_meta, 'reqd', 0) if field_meta else 0
+                    }
+                    
+                    columns.append(column_data)
+                    
+                    # Store full field metadata
+                    if field_meta:
+                        field_metadata[fieldname] = {
+                            "label": field_meta.label,
+                            "fieldtype": field_meta.fieldtype,
+                            "options": getattr(field_meta, 'options', None),
+                            "mandatory": getattr(field_meta, 'reqd', 0),
+                            "read_only": getattr(field_meta, 'read_only', 0),
+                            "hidden": getattr(field_meta, 'hidden', 0)
+                        }
+        
+        # If no columns found in the expected structure, try alternative parsing
+        if not columns and layout_data:
+            frappe.logger().info("Trying alternative layout parsing...")
+            columns = extract_columns_from_alternative_layout(layout_data, doctype)
+        
+        result["columns"] = columns
+        result["field_metadata"] = field_metadata
+        
+        # Log the final result
+        frappe.logger().info(f"Processed grid layout for {doctype}: {len(columns)} columns found")
+        frappe.logger().info(f"Columns: {[col['fieldname'] for col in columns]}")
+        
+        return result
+        
+    except Exception as e:
+        frappe.logger().error(f"Error in get_grid_layout for {doctype}: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e),
+            "columns": [],
+            "field_metadata": {}
+        }
+
+
+def extract_columns_from_alternative_layout(layout_data, doctype):
+    """
+    Extract columns from alternative layout structures
+    """
+    columns = []
+    
+    def extract_from_dict(data, path=""):
+        if isinstance(data, dict):
+            # Check if this is a field definition
+            if "fieldname" in data or "field" in data:
+                fieldname = data.get("fieldname") or data.get("field")
+                if fieldname:
+                    label = data.get("label") or data.get("name") or fieldname
+                    
+                    # Get field metadata
+                    field_meta = frappe.get_meta(doctype).get_field(fieldname)
+                    
+                    columns.append({
+                        "fieldname": fieldname,
+                        "label": label,
+                        "fieldtype": field_meta.fieldtype if field_meta else data.get("fieldtype", "Data"),
+                        "options": getattr(field_meta, 'options', None) if field_meta else data.get("options"),
+                        "width": data.get("width"),
+                        "read_only": data.get("read_only", 0),
+                        "hidden": data.get("hidden", 0),
+                        "reqd": data.get("reqd", 0)
+                    })
+            
+            # Recursively check nested structures
+            for key, value in data.items():
+                if isinstance(value, (dict, list)):
+                    extract_from_dict(value, f"{path}.{key}" if path else key)
+    
+    def extract_from_list(data_list, path=""):
+        for item in data_list:
+            if isinstance(item, (dict, list)):
+                extract_from_dict(item, path)
+    
+    if isinstance(layout_data, list):
+        extract_from_list(layout_data)
+    elif isinstance(layout_data, dict):
+        extract_from_dict(layout_data)
+    
+    return columns
+
+
+@frappe.whitelist()
+def get_grid_data(doctype, filters=None, fields=None, parent_doctype=None, parent_name=None):
+    """
+    Get grid data with dynamic columns based on grid layout
+    """
+    try:
+        # Get the grid layout to determine which fields to show
+        layout_result = get_grid_layout(doctype)
+        
+        if not layout_result.get("success"):
+            return layout_result
+        
+        columns = layout_result.get("columns", [])
+        
+        # Use fields from grid layout if not specified
+        if not fields:
+            fields = [col["fieldname"] for col in columns if not col.get("hidden")]
+        
+        # Add essential fields if not present
+        essential_fields = ["name", "modified", "creation"]
+        for field in essential_fields:
+            if field not in fields:
+                fields.append(field)
+        
+        # Parse filters if they are JSON string
+        if isinstance(filters, str):
+            try:
+                filters = json.loads(filters)
+            except json.JSONDecodeError:
+                filters = {}
+        
+        # Build query based on whether it's a child table or standalone
+        if parent_doctype and parent_name:
+            # This is a child table - get data from parent document
+            parent_doc = frappe.get_doc(parent_doctype, parent_name)
+            
+            # Find the child table field
+            child_table_data = []
+            for child_field in frappe.get_meta(parent_doctype).get_table_fields():
+                if child_field.options == doctype:
+                    child_table = parent_doc.get(child_field.fieldname)
+                    if child_table:
+                        for child in child_table:
+                            child_dict = child.as_dict()
+                            # Filter to only include requested fields
+                            filtered_child = {}
+                            for field in fields:
+                                if field in child_dict:
+                                    filtered_child[field] = child_dict[field]
+                            child_table_data.append(filtered_child)
+                        break
+            
+            data = child_table_data
+            
+        else:
+            # This is a standalone document
+            data = frappe.get_list(
+                doctype,
+                fields=fields,
+                filters=filters or {},
+                order_by="creation desc"
+            )
+        
+        result = {
+            "success": True,
+            "columns": columns,
+            "data": data,
+            "field_metadata": layout_result.get("field_metadata", {}),
+            "total_count": len(data)
+        }
+        
+        # Log the result for debugging
+        frappe.logger().info(f"Grid data for {doctype}: {len(data)} records with {len(fields)} fields")
+        
+        return result
+        
+    except Exception as e:
+        frappe.logger().error(f"Error in get_grid_data for {doctype}: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e),
+            "columns": [],
+            "data": [],
+            "total_count": 0
+        }
+
+
+@frappe.whitelist()
+def get_child_table_grid(parent_doctype, parent_name, child_doctype, child_fieldname):
+    """
+    Convenience function specifically for child table grids
+    """
+    return get_grid_data(
+        doctype=child_doctype,
+        parent_doctype=parent_doctype,
+        parent_name=parent_name
+    )
+
+
+# Example usage and test function
+@frappe.whitelist()
+def test_grid_layout(doctype="CRM Pipeline Items"):
+    """
+    Test function to see what the grid layout returns
+    """
+    result = get_grid_layout(doctype)
+    
+    frappe.logger().info("=== GRID LAYOUT TEST RESULTS ===")
+    frappe.logger().info(f"Doctype: {doctype}")
+    frappe.logger().info(f"Success: {result.get('success')}")
+    frappe.logger().info(f"Number of columns: {len(result.get('columns', []))}")
+    frappe.logger().info(f"Columns: {[col['fieldname'] for col in result.get('columns', [])]}")
+    frappe.logger().info(f"Raw layout sample: {json.dumps(result.get('raw_layout', [])[:2], indent=2)}")
+    
+    return result

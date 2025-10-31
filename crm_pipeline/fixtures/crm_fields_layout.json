@@ -151,5 +151,23 @@
   "modified": "2025-10-27 08:46:07.964448",
   "name": "CRM Master Pipeline Child-Quick Entry",
   "type": "Quick Entry"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "CRM Fields Layout",
+  "dt": "CRM Pipeline Items",
+  "layout": "[\n  {\n    \"name\": \"Deal\",\n    \"field\": \"deal\"\n  },\n  {\n    \"name\": \"Deal Owner\",\n    \"field\": \"deal_owner\"\n  },\n  {\n    \"name\": \"Deal Value\",\n    \"field\": \"deal_value\"\n  },\n  {\n    \"name\": \"Probablity\",\n    \"field\": \"probablity\"\n  }\n]\n",
+  "modified": "2025-10-30 22:02:54.819214",
+  "name": "CRM Pipeline Items-Grid Row",
+  "type": "Grid Row"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "CRM Fields Layout",
+  "dt": "CRM Master Pipeline Child",
+  "layout": "[\n  {\n    \"name\": \"Pipeline Name\",\n    \"field\": \"pipeline_name\"\n  },\n  {\n    \"name\": \"Status\",\n    \"field\": \"status\"\n  }\n]\n",
+  "modified": "2025-10-30 22:20:36.063353",
+  "name": "CRM Master Pipeline Child-Grid Row",
+  "type": "Grid Row"
  }
 ]

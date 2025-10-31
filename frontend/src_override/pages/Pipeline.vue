@@ -130,10 +130,14 @@
             <table class="w-full">
               <thead class="bg-gray-50 dark:bg-gray-700">
                 <tr>
-                  <th class="px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-300">{{ __('Deal Name') }}</th>
-                  <th class="px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-300">{{ __('Deal Owner') }}</th>
-                  <th class="px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-300">{{ __('Deal Value') }}</th>
-                  <th class="px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-300">{{ __('Probability') }}</th>
+                  <!-- Dynamic Columns based on API response -->
+                  <th 
+                    v-for="column in dealGridColumns" 
+                    :key="column.fieldname"
+                    class="px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-300"
+                  >
+                    {{ column.label }}
+                  </th>
                   <th class="px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-300">{{ __('Actions') }}</th>
                 </tr>
               </thead>
@@ -143,17 +147,21 @@
                   :key="deal.name" 
                   class="hover:bg-gray-50 dark:hover:bg-gray-700"
                 >
-                  <td class="px-4 py-3 text-gray-900 dark:text-gray-100">
-                    {{ deal.deal }}
-                  </td>
-                  <td class="px-4 py-3 text-gray-900 dark:text-gray-100">
-                    {{ deal.deal_owner }}
-                  </td>
-                  <td class="px-4 py-3 text-gray-900 dark:text-gray-100">
-                    {{ formatCurrency(deal.deal_value) }}
-                  </td>
-                  <td class="px-4 py-3 text-gray-900 dark:text-gray-100">
-                    {{ deal.probability }}%
+                  <!-- Dynamic Deal Data -->
+                  <td 
+                    v-for="column in dealGridColumns" 
+                    :key="column.fieldname"
+                    class="px-4 py-3 text-gray-900 dark:text-gray-100"
+                  >
+                    <template v-if="column.fieldtype === 'Float'">
+                      {{ formatCurrency(deal[column.fieldname]) }}
+                    </template>
+                    <template v-else-if="column.fieldtype === 'Percent'">
+                      {{ deal[column.fieldname] }}%
+                    </template>
+                    <template v-else>
+                      {{ deal[column.fieldname] }}
+                    </template>
                   </td>
                   <td class="px-4 py-3">
                     <div class="flex gap-2">
@@ -168,7 +176,7 @@
                   </td>
                 </tr>
                 <tr v-if="childDeals.length === 0">
-                  <td colspan="6" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                  <td :colspan="dealGridColumns.length + 1" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
                     {{ __('No deals tagged to this pipeline.') }}
                     <Button
                       :label="__('Add your first deal')"
@@ -243,9 +251,15 @@
             <table class="w-full">
               <thead class="bg-gray-50 dark:bg-gray-700">
                 <tr>
-                  <th class="px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-300">{{ __('Pipeline Name') }}</th>
-                  <th class="px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-300">{{ __('Pipeline Owner') }}</th>
-                  <th class="px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-300">{{ __('Status') }}</th>
+                  <!-- Dynamic Columns based on API response -->
+                  <th 
+                    v-for="column in pipelineGridColumns" 
+                    :key="column.fieldname"
+                    class="px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-300"
+                  >
+                    {{ column.label }}
+                  </th>
+                  <!-- Static columns for total deals, total value, and actions -->
                   <th class="px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-300">{{ __('Total Deals') }}</th>
                   <th class="px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-300">{{ __('Total Value') }}</th>
                   <th class="px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-300">{{ __('Actions') }}</th>
@@ -257,17 +271,28 @@
                   :key="pipeline.name" 
                   class="hover:bg-gray-50 dark:hover:bg-gray-700"
                 >
-                  <td class="px-4 py-3 text-gray-900 dark:text-gray-100">
-                    {{ pipeline.pipeline_name }}
+                  <!-- Dynamic Pipeline Data -->
+                  <td 
+                    v-for="column in pipelineGridColumns" 
+                    :key="column.fieldname"
+                    class="px-4 py-3 text-gray-900 dark:text-gray-100"
+                  >
+                    <template v-if="column.fieldname === 'status'">
+                      <Badge :variant="getPipelineStatus(pipeline[column.fieldname]).variant" :theme="getPipelineStatus(pipeline[column.fieldname]).theme">
+                        {{ pipeline[column.fieldname] }}
+                      </Badge>
+                    </template>
+                    <template v-else-if="column.fieldtype === 'Float'">
+                      {{ formatCurrency(pipeline[column.fieldname]) }}
+                    </template>
+                    <template v-else-if="column.fieldtype === 'Percent'">
+                      {{ pipeline[column.fieldname] }}%
+                    </template>
+                    <template v-else>
+                      {{ pipeline[column.fieldname] }}
+                    </template>
                   </td>
-                  <td class="px-4 py-3 text-gray-900 dark:text-gray-100">
-                    {{ pipeline.pipeline_owner }}
-                  </td>
-                  <td class="px-4 py-3 text-gray-900 dark:text-gray-100">
-                    <Badge :variant="getPipelineStatus(pipeline.status).variant" :theme="getPipelineStatus(pipeline.status).theme">
-                      {{ pipeline.status }}
-                    </Badge>
-                  </td>
+                  <!-- Static columns data -->
                   <td class="px-4 py-3 text-gray-900 dark:text-gray-100">
                     {{ pipeline.total_deals || 0 }}
                   </td>
@@ -276,12 +301,6 @@
                   </td>
                   <td class="px-4 py-3">
                     <div class="flex gap-2">
-                      <!-- <Button
-                        :label="__('View')"
-                        variant="ghost"
-                        icon="external-link"
-                        @click="viewPipeline(pipeline.pipeline)"
-                      /> -->
                       <Button
                         :label="__('Delete')"
                         variant="subtle"
@@ -293,7 +312,7 @@
                   </td>
                 </tr>
                 <tr v-if="childPipelines.length === 0">
-                  <td colspan="6" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                  <td :colspan="pipelineGridColumns.length + 3" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
                     {{ __('No child pipelines linked to this master pipeline.') }}
                     <Button
                       :label="__('Add your first pipeline')"
@@ -633,6 +652,16 @@ const hasChanges = ref(false)
 // Reactive variable for child pipelines with details
 const childPipelinesWithDetailsData = ref([])
 
+// Deal grid layout data
+const dealGridLayout = ref({
+  data: null
+})
+
+// Pipeline grid layout data
+const pipelineGridLayout = ref({
+  data: null
+})
+
 const { triggerOnChange, assignees, document, scripts, error } = useDocument(
   'CRM Pipeline',
   props.pipelineId,
@@ -659,6 +688,106 @@ const childPipelinesWithDetails = computed(() => {
         total_deals: 0,
         total_value: 0
       }))
+})
+
+// Dynamic deal grid columns based on API response
+const dealGridColumns = computed(() => {
+  if (dealGridLayout.value.data && dealGridLayout.value.data.columns) {
+    // Filter out hidden columns and return visible ones
+    return dealGridLayout.value.data.columns.filter(column => !column.hidden)
+  }
+  // Fallback to default columns if API hasn't loaded yet
+  return [
+    {
+      fieldname: 'deal',
+      label: 'Deal',
+      fieldtype: 'Link',
+      options: 'CRM Deal',
+      width: null,
+      read_only: 0,
+      hidden: 0,
+      reqd: 0
+    },
+    {
+      fieldname: 'deal_owner',
+      label: 'Deal Owner',
+      fieldtype: 'Link',
+      options: 'User',
+      width: null,
+      read_only: 0,
+      hidden: 0,
+      reqd: 0
+    },
+    {
+      fieldname: 'deal_value',
+      label: 'Deal Value',
+      fieldtype: 'Float',
+      options: null,
+      width: null,
+      read_only: 0,
+      hidden: 0,
+      reqd: 0
+    },
+    {
+      fieldname: 'est_qoutation_sales',
+      label: 'Est Quotation Sales',
+      fieldtype: 'Float',
+      options: null,
+      width: null,
+      read_only: 0,
+      hidden: 0,
+      reqd: 0
+    },
+    {
+      fieldname: 'probablity',
+      label: 'Probablity',
+      fieldtype: 'Percent',
+      options: null,
+      width: null,
+      read_only: 0,
+      hidden: 0,
+      reqd: 0
+    }
+  ]
+})
+
+// Dynamic pipeline grid columns based on API response
+const pipelineGridColumns = computed(() => {
+  if (pipelineGridLayout.value.data && pipelineGridLayout.value.data.columns) {
+    // Filter out hidden columns and return visible ones
+    return pipelineGridLayout.value.data.columns.filter(column => !column.hidden)
+  }
+  // Fallback to default columns if API hasn't loaded yet
+  return [
+    {
+      fieldname: 'pipeline_name',
+      label: 'Pipeline Name',
+      fieldtype: 'Data',
+      width: null,
+      read_only: 0,
+      hidden: 0,
+      reqd: 0
+    },
+    {
+      fieldname: 'pipeline_owner',
+      label: 'Pipeline Owner',
+      fieldtype: 'Link',
+      options: 'User',
+      width: null,
+      read_only: 0,
+      hidden: 0,
+      reqd: 0
+    },
+    {
+      fieldname: 'status',
+      label: 'Status',
+      fieldtype: 'Select',
+      width: null,
+      read_only: 0,
+      hidden: 0,
+      reqd: 0
+    }
+  ]
 })
 
 // Deals summary calculations
@@ -728,6 +857,36 @@ const { document: newDeal } = useDocument('CRM Pipeline Items')
 // New pipeline document (using CRM Master Pipeline Child)
 const { document: newPipeline } = useDocument('CRM Master Pipeline Child')
 
+// Load deal grid layout
+function loadDealGridLayout() {
+  call('crm_pipeline.api.get_grid_layout', {
+    doctype: "CRM Pipeline Items",
+  })
+    .then((r) => {
+      console.log("deal grid layout response", r)
+      dealGridLayout.value.data = r
+    })
+    .catch((e) => {
+      console.error("Failed to load grid layout:", e)
+      toast.error(e.message || __('Failed to load grid layout'))
+    })
+}
+
+// Load pipeline grid layout
+function loadPipelineGridLayout() {
+  call('crm_pipeline.api.get_grid_layout', {
+    doctype: "CRM Master Pipeline Child",
+  })
+    .then((r) => {
+      console.log("pipeline grid layout response", r)
+      pipelineGridLayout.value.data = r
+    })
+    .catch((e) => {
+      console.error("Failed to load pipeline grid layout:", e)
+      toast.error(e.message || __('Failed to load pipeline grid layout'))
+    })
+}
+
 // Load child pipelines with deals data
 async function loadChildPipelinesWithDeals() {
   try {
@@ -752,6 +911,10 @@ watch(doc, async (newDoc) => {
   if (newDoc) {
     localLogs.value = newDoc.logs ? JSON.parse(JSON.stringify(newDoc.logs)) : []
     hasChanges.value = false
+    
+    // Load grid layouts when document is available
+    loadDealGridLayout()
+    loadPipelineGridLayout()
     
     // Load child pipelines with deal details when document changes
     if (newDoc.pipeline_type === 'Master Pipeline') {
