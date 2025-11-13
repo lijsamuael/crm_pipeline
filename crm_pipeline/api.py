@@ -402,6 +402,30 @@ def get_data(doctype, filters=None, order_by=None, **kwargs):
         if isinstance(view, str):
             view = frappe.parse_json(view)
         view_type = view.get('view_type', 'list')
+        group_by_field = view.get('group_by_field', 'owner')
+        
+        # Get other view-related parameters
+        column_field = safe_kwargs.get('column_field', 'status')
+        title_field = safe_kwargs.get('title_field', '')
+        
+        # Get kanban parameters
+        kanban_columns = safe_kwargs.get('kanban_columns', '[]')
+        if isinstance(kanban_columns, str):
+            try:
+                kanban_columns = frappe.parse_json(kanban_columns)
+            except:
+                kanban_columns = []
+        elif not kanban_columns:
+            kanban_columns = []
+            
+        kanban_fields = safe_kwargs.get('kanban_fields', '[]')
+        if isinstance(kanban_fields, str):
+            try:
+                kanban_fields = frappe.parse_json(kanban_fields)
+            except:
+                kanban_fields = []
+        elif not kanban_fields:
+            kanban_fields = []
         
         # Get the actual data
         data = frappe.get_all(
@@ -427,30 +451,59 @@ def get_data(doctype, filters=None, order_by=None, **kwargs):
                     "options": field.options
                 })
         
-        # Get columns and rows
-        columns = [
-            {"label": "Pipeline Name", "type": "Data", "key": "pipeline_name", "width": "12rem"},
-            {"label": "Organization", "type": "Link", "key": "organization", "options": "CRM Organization", "width": "10rem"},
-            {"label": "Status", "type": "Link", "key": "status", "options": "CRM Pipeline Status", "width": "8rem"},
-            {"label": "Pipeline Owner", "type": "Link", "key": "pipeline_owner", "options": "User", "width": "10rem"},
-            {"label": "Est Pipeline Value", "type": "Data", "key": "est_pipeline_value", "width": "10rem"},
-            {"label": "Email", "type": "Data", "key": "email", "width": "12rem"},
-            {"label": "Mobile No", "type": "Data", "key": "mobile_no", "width": "11rem"},
-            {"label": "Last Modified", "type": "Datetime", "key": "modified", "width": "8rem"},
-        ]
+        # Get columns from request (saved view) or use defaults
+        columns = safe_kwargs.get('columns')
+        if columns:
+            # Parse if it's a string
+            if isinstance(columns, str):
+                try:
+                    columns = frappe.parse_json(columns)
+                except:
+                    columns = None
         
-        rows = fields
+        # If no columns provided, use defaults
+        if not columns:
+            columns = [
+                {"label": "Pipeline Name", "type": "Data", "key": "pipeline_name", "width": "12rem"},
+                {"label": "Organization", "type": "Link", "key": "organization", "options": "CRM Organization", "width": "10rem"},
+                {"label": "Status", "type": "Link", "key": "status", "options": "CRM Pipeline Status", "width": "8rem"},
+                {"label": "Pipeline Owner", "type": "Link", "key": "pipeline_owner", "options": "User", "width": "10rem"},
+                {"label": "Est Pipeline Value", "type": "Data", "key": "est_pipeline_value", "width": "10rem"},
+                {"label": "Email", "type": "Data", "key": "email", "width": "12rem"},
+                {"label": "Mobile No", "type": "Data", "key": "mobile_no", "width": "11rem"},
+                {"label": "Last Modified", "type": "Datetime", "key": "modified", "width": "8rem"},
+            ]
+        
+        # Get rows from request (saved view) or use defaults
+        rows = safe_kwargs.get('rows')
+        if rows:
+            # Parse if it's a string
+            if isinstance(rows, str):
+                try:
+                    rows = frappe.parse_json(rows)
+                except:
+                    rows = None
+        
+        # If no rows provided, use default fields
+        if not rows:
+            rows = fields
         
         return {
+            "data": data,
             "columns": columns,
             "rows": rows,
-            "total_count": total_count,
-            "row_count": len(data),
-            "data": data,
+            "fields": all_fields,
+            "column_field": column_field,
+            "title_field": title_field,
+            "kanban_columns": kanban_columns,
+            "kanban_fields": kanban_fields,
+            "group_by_field": group_by_field,
             "page_length": page_length,
             "page_length_count": page_length_count,
+            "total_count": total_count,
+            "row_count": len(data),
             "view_type": view_type,
-            "fields": all_fields  # Add this for column selection
+            "is_default": False
         }
         
     except Exception as e:
@@ -467,8 +520,7 @@ def get_data(doctype, filters=None, order_by=None, **kwargs):
             "fields": []  # Empty fields array as fallback
         }
         
-        
-        
+
         
         
         
