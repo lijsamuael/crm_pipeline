@@ -16,32 +16,7 @@
         v-if="document.actions?.length"
         :actions="document.actions"
       />
-      <AssignTo v-model="assignees.data" doctype="CRM Pipeline" :docname="pipelineId" />
-      
-      <!-- Change Status Button -->
-      <Dropdown
-        :options="statusOptions"
-        placement="right"
-      >
-        <template #default="{ open }">
-          <Button
-            :label="__('Change Status')"
-            :iconRight="open ? 'chevron-up' : 'chevron-down'"
-            variant="outline"
-          >
-            <template #prefix>
-              <IndicatorIcon :class="getPipelineStatus(doc.status).color" />
-            </template>
-          </Button>
-        </template>
-      </Dropdown>
-
-      <Button
-         v-if="doc.pipeline_type === 'Default'"
-        :label="__('Convert to Deal')"
-        variant="solid"
-        @click="showConvertToDealModal = true"
-      />
+      <!-- <AssignTo v-model="assignees.data" doctype="CRM Pipeline" :docname="pipelineId" /> -->
 
       <!-- Save Button (shown when there are changes) -->
       <Button
@@ -72,6 +47,46 @@
 
         <!-- Deals Tab -->
         <div v-else-if="currentTab?.name === 'Deals'" class="p-5">
+          <!-- Header with Title and Actions -->
+          <div class="flex flex-col gap-4 mb-6">
+            <div class="flex items-center justify-between">
+              <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ __('Deals') }}</h3>
+              <Button
+                :label="__('Add New Deal')"
+                variant="solid"
+                icon="plus"
+                @click="showAddDealModal = true"
+              />
+            </div>
+            
+            <!-- Convert and Status Change Buttons -->
+            <div class="flex flex-wrap gap-2">
+              <Button
+                v-if="doc.pipeline_type === 'Default'"
+                :label="__('Convert to Deal')"
+                variant="solid"
+                @click="showConvertToDealModal = true"
+              />
+              
+              <Dropdown
+                :options="statusOptions"
+                placement="bottom-end"
+              >
+                <template #default="{ open }">
+                  <Button
+                    :label="__('Change Status')"
+                    :iconRight="open ? 'chevron-up' : 'chevron-down'"
+                    variant="outline"
+                  >
+                    <template #prefix>
+                      <IndicatorIcon :class="getPipelineStatus(doc.status).color" />
+                    </template>
+                  </Button>
+                </template>
+              </Dropdown>
+            </div>
+          </div>
+
           <!-- Deals Summary -->
           <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
             <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
@@ -86,16 +101,6 @@
               <div class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">{{ __('Expected Sales') }}</div>
               <div class="text-2xl font-bold text-blue-600 dark:text-blue-400">{{ formatCurrency(dealsSummary.expectedSales) }}</div>
             </div>
-          </div>
-
-          <div class="flex items-center justify-between mb-4">
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ __('Deals') }}</h3>
-            <Button
-              :label="__('Add New Deal')"
-              variant="solid"
-              icon="plus"
-              @click="showAddDealModal = true"
-            />
           </div>
           
           <!-- Add Deal Modal -->
@@ -126,73 +131,116 @@
             </template>
           </Dialog>
           
+          <!-- Scrollable Deals Table -->
           <div class="border rounded-lg overflow-hidden border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
-            <table class="w-full">
-              <thead class="bg-gray-50 dark:bg-gray-700">
-                <tr>
-                  <!-- Dynamic Columns based on API response -->
-                  <th 
-                    v-for="column in dealGridColumns" 
-                    :key="column.fieldname"
-                    class="px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-300"
+            <div class="overflow-x-auto">
+              <table class="w-full min-w-max">
+                <thead class="bg-gray-50 dark:bg-gray-700">
+                  <tr>
+                    <!-- Dynamic Columns based on API response -->
+                    <th 
+                      v-for="column in dealGridColumns" 
+                      :key="column.fieldname"
+                      class="px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap"
+                    >
+                      {{ column.label }}
+                    </th>
+                    <th class="px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">{{ __('Actions') }}</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 dark:divide-gray-600">
+                  <tr 
+                    v-for="deal in childDeals" 
+                    :key="deal.name" 
+                    class="hover:bg-gray-50 dark:hover:bg-gray-700"
                   >
-                    {{ column.label }}
-                  </th>
-                  <th class="px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-300">{{ __('Actions') }}</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-gray-200 dark:divide-gray-600">
-                <tr 
-                  v-for="deal in childDeals" 
-                  :key="deal.name" 
-                  class="hover:bg-gray-50 dark:hover:bg-gray-700"
-                >
-                  <!-- Dynamic Deal Data -->
-                  <td 
-                    v-for="column in dealGridColumns" 
-                    :key="column.fieldname"
-                    class="px-4 py-3 text-gray-900 dark:text-gray-100"
-                  >
-                    <template v-if="column.fieldtype === 'Float'">
-                      {{ formatCurrency(deal[column.fieldname]) }}
-                    </template>
-                    <template v-else-if="column.fieldtype === 'Percent'">
-                      {{ deal[column.fieldname] }}%
-                    </template>
-                    <template v-else>
-                      {{ deal[column.fieldname] }}
-                    </template>
-                  </td>
-                  <td class="px-4 py-3">
-                    <div class="flex gap-2">
+                    <!-- Dynamic Deal Data -->
+                    <td 
+                      v-for="column in dealGridColumns" 
+                      :key="column.fieldname"
+                      class="px-4 py-3 text-gray-900 dark:text-gray-100 whitespace-nowrap"
+                    >
+                      <template v-if="column.fieldtype === 'Float'">
+                        {{ formatCurrency(deal[column.fieldname]) }}
+                      </template>
+                      <template v-else-if="column.fieldtype === 'Percent'">
+                        {{ deal[column.fieldname] }}%
+                      </template>
+                      <template v-else>
+                        {{ deal[column.fieldname] }}
+                      </template>
+                    </td>
+                    <td class="px-4 py-3 whitespace-nowrap">
+                      <div class="flex gap-2">
+                        <Button
+                          :label="__('Delete')"
+                          variant="subtle"
+                          theme="red"
+                          icon="trash-2"
+                          @click="deleteDeal(deal.name)"
+                        />
+                      </div>
+                    </td>
+                  </tr>
+                  <tr v-if="childDeals.length === 0">
+                    <td :colspan="dealGridColumns.length + 1" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                      {{ __('No deals tagged to this pipeline.') }}
                       <Button
-                        :label="__('Delete')"
-                        variant="subtle"
-                        theme="red"
-                        icon="trash-2"
-                        @click="deleteDeal(deal.name)"
+                        :label="__('Add your first deal')"
+                        variant="ghost"
+                        class="mt-2"
+                        @click="showAddDealModal = true"
                       />
-                    </div>
-                  </td>
-                </tr>
-                <tr v-if="childDeals.length === 0">
-                  <td :colspan="dealGridColumns.length + 1" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
-                    {{ __('No deals tagged to this pipeline.') }}
-                    <Button
-                      :label="__('Add your first deal')"
-                      variant="ghost"
-                      class="mt-2"
-                      @click="showAddDealModal = true"
-                    />
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
 
         <!-- Pipelines Tab -->
         <div v-else-if="currentTab?.name === 'Pipelines'" class="p-5">
+          <!-- Header with Title and Actions -->
+          <div class="flex flex-col gap-4 mb-6">
+            <div class="flex items-center justify-between">
+              <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ __('Child Pipelines') }}</h3>
+              <Button
+                :label="__('Add New Pipeline')"
+                variant="solid"
+                icon="plus"
+                @click="showAddPipelineModal = true"
+              />
+            </div>
+            
+            <!-- Convert and Status Change Buttons -->
+            <div class="flex flex-wrap gap-2">
+              <Button
+                v-if="doc.pipeline_type === 'Default'"
+                :label="__('Convert to Deal')"
+                variant="solid"
+                @click="showConvertToDealModal = true"
+              />
+              
+              <Dropdown
+                :options="statusOptions"
+                placement="bottom-end"
+              >
+                <template #default="{ open }">
+                  <Button
+                    :label="__('Change Status')"
+                    :iconRight="open ? 'chevron-up' : 'chevron-down'"
+                    variant="outline"
+                  >
+                    <template #prefix>
+                      <IndicatorIcon :class="getPipelineStatus(doc.status).color" />
+                    </template>
+                  </Button>
+                </template>
+              </Dropdown>
+            </div>
+          </div>
+
           <!-- Pipelines Summary -->
           <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
             <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
@@ -207,16 +255,6 @@
               <div class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">{{ __('Total Sales') }}</div>
               <div class="text-2xl font-bold text-blue-600 dark:text-blue-400">{{ formatCurrency(pipelinesSummary.totalSales) }}</div>
             </div>
-          </div>
-
-          <div class="flex items-center justify-between mb-4">
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ __('Child Pipelines') }}</h3>
-            <Button
-              :label="__('Add New Pipeline')"
-              variant="solid"
-              icon="plus"
-              @click="showAddPipelineModal = true"
-            />
           </div>
           
           <!-- Add Pipeline Modal -->
@@ -247,138 +285,174 @@
             </template>
           </Dialog>
           
+          <!-- Scrollable Pipelines Table -->
           <div class="border rounded-lg overflow-hidden border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
-            <table class="w-full">
-              <thead class="bg-gray-50 dark:bg-gray-700">
-                <tr>
-                  <!-- Dynamic Columns based on API response -->
-                  <th 
-                    v-for="column in pipelineGridColumns" 
-                    :key="column.fieldname"
-                    class="px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-300"
+            <div class="overflow-x-auto">
+              <table class="w-full min-w-max">
+                <thead class="bg-gray-50 dark:bg-gray-700">
+                  <tr>
+                    <!-- Dynamic Columns based on API response -->
+                    <th 
+                      v-for="column in pipelineGridColumns" 
+                      :key="column.fieldname"
+                      class="px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap"
+                    >
+                      {{ column.label }}
+                    </th>
+                    <!-- Static columns for total deals, total value, and actions -->
+                    <th class="px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">{{ __('Total Deals') }}</th>
+                    <th class="px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">{{ __('Total Value') }}</th>
+                    <th class="px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">{{ __('Actions') }}</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 dark:divide-gray-600">
+                  <tr 
+                    v-for="pipeline in childPipelinesWithDetails" 
+                    :key="pipeline.name" 
+                    class="hover:bg-gray-50 dark:hover:bg-gray-700"
                   >
-                    {{ column.label }}
-                  </th>
-                  <!-- Static columns for total deals, total value, and actions -->
-                  <th class="px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-300">{{ __('Total Deals') }}</th>
-                  <th class="px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-300">{{ __('Total Value') }}</th>
-                  <th class="px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-300">{{ __('Actions') }}</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-gray-200 dark:divide-gray-600">
-                <tr 
-                  v-for="pipeline in childPipelinesWithDetails" 
-                  :key="pipeline.name" 
-                  class="hover:bg-gray-50 dark:hover:bg-gray-700"
-                >
-                  <!-- Dynamic Pipeline Data -->
-                  <td 
-                    v-for="column in pipelineGridColumns" 
-                    :key="column.fieldname"
-                    class="px-4 py-3 text-gray-900 dark:text-gray-100"
-                  >
-                    <template v-if="column.fieldname === 'status'">
-                      <Badge :variant="getPipelineStatus(pipeline[column.fieldname]).variant" :theme="getPipelineStatus(pipeline[column.fieldname]).theme">
+                    <!-- Dynamic Pipeline Data -->
+                    <td 
+                      v-for="column in pipelineGridColumns" 
+                      :key="column.fieldname"
+                      class="px-4 py-3 text-gray-900 dark:text-gray-100 whitespace-nowrap"
+                    >
+                      <template v-if="column.fieldname === 'status'">
+                        <Badge :variant="getPipelineStatus(pipeline[column.fieldname]).variant" :theme="getPipelineStatus(pipeline[column.fieldname]).theme">
+                          {{ pipeline[column.fieldname] }}
+                        </Badge>
+                      </template>
+                      <template v-else-if="column.fieldtype === 'Float'">
+                        {{ formatCurrency(pipeline[column.fieldname]) }}
+                      </template>
+                      <template v-else-if="column.fieldtype === 'Percent'">
+                        {{ pipeline[column.fieldname] }}%
+                      </template>
+                      <template v-else>
                         {{ pipeline[column.fieldname] }}
-                      </Badge>
-                    </template>
-                    <template v-else-if="column.fieldtype === 'Float'">
-                      {{ formatCurrency(pipeline[column.fieldname]) }}
-                    </template>
-                    <template v-else-if="column.fieldtype === 'Percent'">
-                      {{ pipeline[column.fieldname] }}%
-                    </template>
-                    <template v-else>
-                      {{ pipeline[column.fieldname] }}
-                    </template>
-                  </td>
-                  <!-- Static columns data -->
-                  <td class="px-4 py-3 text-gray-900 dark:text-gray-100">
-                    {{ pipeline.total_deals || 0 }}
-                  </td>
-                  <td class="px-4 py-3 text-gray-900 dark:text-gray-100">
-                    {{ formatCurrency(pipeline.total_value || 0) }}
-                  </td>
-                  <td class="px-4 py-3">
-                    <div class="flex gap-2">
+                      </template>
+                    </td>
+                    <!-- Static columns data -->
+                    <td class="px-4 py-3 text-gray-900 dark:text-gray-100 whitespace-nowrap">
+                      {{ pipeline.total_deals || 0 }}
+                    </td>
+                    <td class="px-4 py-3 text-gray-900 dark:text-gray-100 whitespace-nowrap">
+                      {{ formatCurrency(pipeline.total_value || 0) }}
+                    </td>
+                    <td class="px-4 py-3 whitespace-nowrap">
+                      <div class="flex gap-2">
+                        <Button
+                          :label="__('Delete')"
+                          variant="subtle"
+                          theme="red"
+                          icon="trash-2"
+                          @click="deletePipeline(pipeline.name)"
+                        />
+                      </div>
+                    </td>
+                  </tr>
+                  <tr v-if="childPipelines.length === 0">
+                    <td :colspan="pipelineGridColumns.length + 3" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                      {{ __('No child pipelines linked to this master pipeline.') }}
                       <Button
-                        :label="__('Delete')"
-                        variant="subtle"
-                        theme="red"
-                        icon="trash-2"
-                        @click="deletePipeline(pipeline.name)"
+                        :label="__('Add your first pipeline')"
+                        variant="ghost"
+                        class="mt-2"
+                        @click="showAddPipelineModal = true"
                       />
-                    </div>
-                  </td>
-                </tr>
-                <tr v-if="childPipelines.length === 0">
-                  <td :colspan="pipelineGridColumns.length + 3" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
-                    {{ __('No child pipelines linked to this master pipeline.') }}
-                    <Button
-                      :label="__('Add your first pipeline')"
-                      variant="ghost"
-                      class="mt-2"
-                      @click="showAddPipelineModal = true"
-                    />
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
 
         <!-- Status Tab -->
         <div v-else-if="currentTab?.name === 'Status'" class="p-5">
-          <div class="flex items-center justify-between mb-4">
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ __('Status') }}</h3>
+          <!-- Header with Title and Actions -->
+          <div class="flex flex-col gap-4 mb-6">
+            <div class="flex items-center justify-between">
+              <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ __('Status') }}</h3>
+            </div>
+            
+            <!-- Convert and Status Change Buttons -->
+            <div class="flex flex-wrap gap-2">
+              <Button
+                v-if="doc.pipeline_type === 'Default'"
+                :label="__('Convert to Deal')"
+                variant="solid"
+                @click="showConvertToDealModal = true"
+              />
+              
+              <Dropdown
+                :options="statusOptions"
+                placement="bottom-end"
+              >
+                <template #default="{ open }">
+                  <Button
+                    :label="__('Change Status')"
+                    :iconRight="open ? 'chevron-up' : 'chevron-down'"
+                    variant="outline"
+                  >
+                    <template #prefix>
+                      <IndicatorIcon :class="getPipelineStatus(doc.status).color" />
+                    </template>
+                  </Button>
+                </template>
+              </Dropdown>
+            </div>
           </div>
           
+          <!-- Scrollable Status Table -->
           <div class="border rounded-lg overflow-hidden border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
-            <table class="w-full">
-              <thead class="bg-gray-50 dark:bg-gray-700">
-                <tr>
-                  <th class="px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-300">{{ __('From Status') }}</th>
-                  <th class="px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-300">{{ __('To Status') }}</th>
-                  <th class="px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-300">{{ __('From Date') }}</th>
-                  <th class="px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-300">{{ __('To Date') }}</th>
-                  <th class="px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-300">{{ __('Duration') }}</th>
-                  <th class="px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-300">{{ __('Actions') }}</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-gray-200 dark:divide-gray-600">
-                <tr v-for="(log, index) in localLogs" :key="index" class="hover:bg-gray-50 dark:hover:bg-gray-700">
-                  <td class="px-4 py-3 text-gray-900 dark:text-gray-100">
-                    {{ log.from_status }}
-                  </td>
-                  <td class="px-4 py-3 text-gray-900 dark:text-gray-100">
-                    {{ log.to_status || 'Current' }}
-                  </td>
-                  <td class="px-4 py-3 text-gray-900 dark:text-gray-100">
-                    {{ formatDate(log.from_date) }}
-                  </td>
-                  <td class="px-4 py-3 text-gray-900 dark:text-gray-100">
-                    {{ log.to_date ? formatDate(log.to_date) : 'Ongoing' }}
-                  </td>
-                  <td class="px-4 py-3 text-gray-900 dark:text-gray-100">
-                    {{ log.duration }}
-                  </td>
-                  <td class="px-4 py-3">
-                    <Button
-                      :label="__('Delete')"
-                      variant="subtle"
-                      theme="red"
-                      icon="trash-2"
-                      @click="removeLogRow(index)"
-                    />
-                  </td>
-                </tr>
-                <tr v-if="localLogs.length === 0">
-                  <td colspan="6" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
-                    {{ __('No status logs available. Status changes will appear here automatically.') }}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+            <div class="overflow-x-auto">
+              <table class="w-full min-w-max">
+                <thead class="bg-gray-50 dark:bg-gray-700">
+                  <tr>
+                    <th class="px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">{{ __('From Status') }}</th>
+                    <th class="px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">{{ __('To Status') }}</th>
+                    <th class="px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">{{ __('From Date') }}</th>
+                    <th class="px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">{{ __('To Date') }}</th>
+                    <th class="px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">{{ __('Duration') }}</th>
+                    <th class="px-4 py-3 text-left text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">{{ __('Actions') }}</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 dark:divide-gray-600">
+                  <tr v-for="(log, index) in localLogs" :key="index" class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                    <td class="px-4 py-3 text-gray-900 dark:text-gray-100 whitespace-nowrap">
+                      {{ log.from_status }}
+                    </td>
+                    <td class="px-4 py-3 text-gray-900 dark:text-gray-100 whitespace-nowrap">
+                      {{ log.to_status || 'Current' }}
+                    </td>
+                    <td class="px-4 py-3 text-gray-900 dark:text-gray-100 whitespace-nowrap">
+                      {{ formatDate(log.from_date) }}
+                    </td>
+                    <td class="px-4 py-3 text-gray-900 dark:text-gray-100 whitespace-nowrap">
+                      {{ log.to_date ? formatDate(log.to_date) : 'Ongoing' }}
+                    </td>
+                    <td class="px-4 py-3 text-gray-900 dark:text-gray-100 whitespace-nowrap">
+                      {{ log.duration }}
+                    </td>
+                    <td class="px-4 py-3 whitespace-nowrap">
+                      <Button
+                        :label="__('Delete')"
+                        variant="subtle"
+                        theme="red"
+                        icon="trash-2"
+                        @click="removeLogRow(index)"
+                      />
+                    </td>
+                  </tr>
+                  <tr v-if="localLogs.length === 0">
+                    <td colspan="6" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                      {{ __('No status logs available. Status changes will appear here automatically.') }}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
 
@@ -396,145 +470,81 @@
         />
       </template>
     </Tabs>
-    <Resizer class="flex flex-col justify-between border-l border-gray-200 dark:border-gray-700" side="right">
-      <div
-        class="flex h-10.5 cursor-copy items-center border-b border-gray-200 dark:border-gray-700 px-5 py-2.5 text-lg font-medium text-gray-900 dark:text-gray-100"
-        @click="copyToClipboard(pipelineId)"
-      >
-        {{ __(pipelineId) }}
-      </div>
-      <FileUploader
-        @success="(file) => updateField('image', file.file_url)"
-        :validateFile="validateIsImageFile"
-      >
-        <template #default="{ openFileSelector, error }">
-          <div class="flex items-center justify-start gap-5 border-b border-gray-200 dark:border-gray-700 p-5">
-            <div class="group relative size-12">
-              <Avatar
-                size="3xl"
-                class="size-12"
-                :label="title"
-                :image="doc.image"
-              />
-              <component
-                :is="doc.image ? Dropdown : 'div'"
-                v-bind="
-                  doc.image
-                    ? {
-                        options: [
-                          {
-                            icon: 'upload',
-                            label: doc.image
-                              ? __('Change image')
-                              : __('Upload image'),
-                            onClick: openFileSelector,
-                          },
-                          {
-                            icon: 'trash-2',
-                            label: __('Remove image'),
-                            onClick: () => updateField('image', ''),
-                          },
-                        ],
-                      }
-                    : { onClick: openFileSelector }
-                "
-                class="!absolute bottom-0 left-0 right-0"
-              >
-                <div
-                  class="z-1 absolute bottom-0.5 left-0 right-0.5 flex h-9 cursor-pointer items-center justify-center rounded-b-full bg-black bg-opacity-40 dark:bg-white dark:bg-opacity-20 pt-3 opacity-0 duration-300 ease-in-out group-hover:opacity-100"
-                  style="
-                    -webkit-clip-path: inset(12px 0 0 0);
-                    clip-path: inset(12px 0 0 0);
-                  "
-                >
-                  <CameraIcon class="size-4 cursor-pointer text-white dark:text-gray-100" />
-                </div>
-              </component>
-            </div>
-            <div class="flex flex-col gap-2.5 truncate">
-              <Tooltip :text="doc.pipeline_name || __('Set name')">
-                <div class="truncate text-2xl font-medium text-gray-900 dark:text-gray-100">
-                  {{ title }}
-                </div>
-              </Tooltip>
-              <div class="flex gap-1.5">
-                <Button
-                  v-if="callEnabled"
-                  :tooltip="__('Make a call')"
-                  :icon="PhoneIcon"
-                  @click="
-                    () =>
-                      doc.mobile_no
-                        ? makeCall(doc.mobile_no)
-                        : toast.error(__('No phone number set'))
-                  "
-                />
-
-                <Button
-                  :tooltip="__('Send an email')"
-                  :icon="Email2Icon"
-                  @click="
-                    doc.email ? openEmailBox() : toast.error(__('No email set'))
-                  "
-                />
-                <Button
-                  :tooltip="__('Go to website')"
-                  :icon="LinkIcon"
-                  @click="
-                    doc.website
-                      ? openWebsite(doc.website)
-                      : toast.error(__('No website set'))
-                  "
-                />
-
-                <Button
-                  :tooltip="__('Attach a file')"
-                  :icon="AttachmentIcon"
-                  @click="showFilesUploader = true"
-                />
-
-                <Button
-                  :tooltip="__('Delete')"
-                  variant="subtle"
-                  theme="red"
-                  icon="trash-2"
-                  @click="deleteCurrentPipeline"
-                />
-              </div>
-              <ErrorMessage :message="__(error)" />
-            </div>
-          </div>
-        </template>
-      </FileUploader>
-      <SLASection
-        v-if="doc.sla_status"
-        v-model="doc"
-        @updateField="updateField"
-      />
-      <div
-        v-if="sections.data"
-        class="flex flex-1 flex-col justify-between overflow-hidden"
-      >
-        <SidePanelLayout
-          :sections="sections.data"
-          doctype="CRM Pipeline"
-          :docname="pipelineId"
-          @reload="sections.reload"
-          @afterFieldChange="reloadAssignees"
-        />
-      </div>
-    </Resizer>
   </div>
   <ErrorPage
     v-else-if="errorTitle"
     :errorTitle="errorTitle"
     :errorMessage="errorMessage"
   />
-  <ConvertPipelineToDealModal
-    v-if="showConvertToDealModal"
+
+  <!-- Convert to Deal Modal -->
+  <Dialog
     v-model="showConvertToDealModal"
-    :pipeline="doc"
-  />
+    :options="{
+      title: __('Convert to Deal'),
+      size: 'xl',
+      actions: [
+        {
+          label: __('Convert'),
+          variant: 'solid',
+          onClick: convertToDeal,
+        },
+      ],
+    }"
+  >
+    <template #body-content>
+      <div class="mb-4 flex items-center gap-2 text-ink-gray-5">
+        <OrganizationsIcon class="h-4 w-4" />
+        <label class="block text-base">{{ __('Organization') }}</label>
+      </div>
+      <div class="ml-6">
+        <div class="flex items-center justify-between text-base">
+          <div>{{ __('Choose Existing') }}</div>
+          <Switch v-model="existingOrganizationChecked" />
+        </div>
+        <Link
+          v-if="existingOrganizationChecked"
+          class="form-control mt-2.5"
+          variant="outline"
+          size="md"
+          :value="existingOrganization"
+          doctype="CRM Organization"
+          @change="(data) => (existingOrganization = data)"
+        />
+        <div v-else class="mt-2.5 text-base">
+          {{
+            __(
+              'New organization will be created based on the data in details section',
+            )
+          }}
+        </div>
+      </div>
+
+      <div class="mb-4 mt-6 flex items-center gap-2 text-ink-gray-5">
+        <ContactsIcon class="h-4 w-4" />
+        <label class="block text-base">{{ __('Contact') }}</label>
+      </div>
+      <div class="ml-6">
+        <div class="flex items-center justify-between text-base">
+          <div>{{ __('Choose Existing') }}</div>
+          <Switch v-model="existingContactChecked" />
+        </div>
+        <Link
+          v-if="existingContactChecked"
+          class="form-control mt-2.5"
+          variant="outline"
+          size="md"
+          :value="existingContact"
+          doctype="Contact"
+          @change="(data) => (existingContact = data)"
+        />
+        <div v-else class="mt-2.5 text-base">
+          {{ __("New contact will be created based on the person's details") }}
+        </div>
+      </div>
+    </template>
+  </Dialog>
+
   <FilesUploader
     v-model="showFilesUploader"
     doctype="CRM Pipeline"
@@ -555,11 +565,11 @@
   />
 </template>
 
+
 <script setup>
 import DeleteLinkedDocModal from '@/components/DeleteLinkedDocModal.vue'
 import ErrorPage from '@/components/ErrorPage.vue'
 import Icon from '@/components/Icon.vue'
-import Resizer from '@/components/Resizer.vue'
 import ActivityIcon from '@/components/Icons/ActivityIcon.vue'
 import EmailIcon from '@/components/Icons/EmailIcon.vue'
 import Email2Icon from '@/components/Icons/Email2Icon.vue'
@@ -568,25 +578,19 @@ import DetailsIcon from '@/components/Icons/DetailsIcon.vue'
 import PhoneIcon from '@/components/Icons/PhoneIcon.vue'
 import TaskIcon from '@/components/Icons/TaskIcon.vue'
 import NoteIcon from '@/components/Icons/NoteIcon.vue'
+import AttachmentIcon from '@/components/Icons/AttachmentIcon.vue'
 import WhatsAppIcon from '@/components/Icons/WhatsAppIcon.vue'
 import IndicatorIcon from '@/components/Icons/IndicatorIcon.vue'
-import CameraIcon from '@/components/Icons/CameraIcon.vue'
-import LinkIcon from '@/components/Icons/LinkIcon.vue'
-import AttachmentIcon from '@/components/Icons/AttachmentIcon.vue'
+import OrganizationsIcon from '@/components/Icons/OrganizationsIcon.vue'
+import ContactsIcon from '@/components/Icons/ContactsIcon.vue'
 import LayoutHeader from '@/components/LayoutHeader.vue'
 import Activities from '@/components/Activities/Activities.vue'
 import AssignTo from '@/components/AssignTo.vue'
 import FilesUploader from '@/components/FilesUploader/FilesUploader.vue'
-import SidePanelLayout from '@/components/SidePanelLayout.vue'
-import SLASection from '@/components/SLASection.vue'
 import CustomActions from '@/components/CustomActions.vue'
-import ConvertPipelineToDealModal from '@/components/Modals/ConvertPipelineToDealModal.vue'
 import FieldLayout from '@/components/FieldLayout/FieldLayout.vue'
 import {
-  openWebsite,
   setupCustomizations,
-  copyToClipboard,
-  validateIsImageFile,
 } from '@/utils'
 import { getView } from '@/utils/view'
 import { getSettings } from '@/stores/settings'
@@ -597,25 +601,23 @@ import { useDocument } from '@/data/document'
 import { whatsappEnabled, callEnabled } from '@/composables/settings'
 import {
   createResource,
-  FileUploader,
   Dropdown,
-  Tooltip,
-  Avatar,
   Tabs,
   Breadcrumbs,
   call,
   usePageMeta,
   toast,
-  Input,
   Badge,
   Dialog,
+  Switch,
+  Link,
 } from 'frappe-ui'
 import { ref, computed, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useActiveTabManager } from '@/composables/useActiveTabManager'
 
 const { brand } = getSettings()
-const { $dialog, $socket, makeCall } = globalStore()
+const { $dialog, $socket } = globalStore()
 const { statusOptions: getStatusOptions, getPipelineStatus } = statusesStore()
 const { doctypeMeta } = getMeta('CRM Pipeline')
 
@@ -644,6 +646,12 @@ const editingDeal = ref(null)
 const showAddPipelineModal = ref(false)
 const isAddingPipeline = ref(false)
 const editingPipeline = ref(null)
+
+// Convert to deal modal state
+const existingContactChecked = ref(false)
+const existingOrganizationChecked = ref(false)
+const existingContact = ref('')
+const existingOrganization = ref('')
 
 // Local state for logs
 const localLogs = ref([])
@@ -693,10 +701,8 @@ const childPipelinesWithDetails = computed(() => {
 // Dynamic deal grid columns based on API response
 const dealGridColumns = computed(() => {
   if (dealGridLayout.value.data && dealGridLayout.value.data.columns) {
-    // Filter out hidden columns and return visible ones
     return dealGridLayout.value.data.columns.filter(column => !column.hidden)
   }
-  // Fallback to default columns if API hasn't loaded yet
   return [
     {
       fieldname: 'deal',
@@ -727,26 +733,6 @@ const dealGridColumns = computed(() => {
       read_only: 0,
       hidden: 0,
       reqd: 0
-    },
-    {
-      fieldname: 'est_qoutation_sales',
-      label: 'Est Quotation Sales',
-      fieldtype: 'Float',
-      options: null,
-      width: null,
-      read_only: 0,
-      hidden: 0,
-      reqd: 0
-    },
-    {
-      fieldname: 'probablity',
-      label: 'Probablity',
-      fieldtype: 'Percent',
-      options: null,
-      width: null,
-      read_only: 0,
-      hidden: 0,
-      reqd: 0
     }
   ]
 })
@@ -754,10 +740,8 @@ const dealGridColumns = computed(() => {
 // Dynamic pipeline grid columns based on API response
 const pipelineGridColumns = computed(() => {
   if (pipelineGridLayout.value.data && pipelineGridLayout.value.data.columns) {
-    // Filter out hidden columns and return visible ones
     return pipelineGridLayout.value.data.columns.filter(column => !column.hidden)
   }
-  // Fallback to default columns if API hasn't loaded yet
   return [
     {
       fieldname: 'pipeline_name',
@@ -808,12 +792,11 @@ const dealsSummary = computed(() => {
   }
 })
 
-// Pipelines summary calculations - now includes deals from all child pipelines
+// Pipelines summary calculations
 const pipelinesSummary = computed(() => {
   const pipelines = childPipelinesWithDetails.value
   const totalPipelines = pipelines.length
   
-  // Calculate total deals and sales across all child pipelines
   let totalDeals = 0
   let totalSales = 0
   
@@ -840,7 +823,7 @@ const dealTabs = createResource({
   auto: false,
 })
 
-// Resource for pipeline field layout (using CRM Master Pipeline Child)
+// Resource for pipeline field layout
 const pipelineTabs = createResource({
   url: 'crm.fcrm.doctype.crm_fields_layout.crm_fields_layout.get_fields_layout',
   cache: ['QuickEntry', 'CRM Master Pipeline Child'],
@@ -854,7 +837,7 @@ const pipelineTabs = createResource({
 // New deal document
 const { document: newDeal } = useDocument('CRM Pipeline Items')
 
-// New pipeline document (using CRM Master Pipeline Child)
+// New pipeline document
 const { document: newPipeline } = useDocument('CRM Master Pipeline Child')
 
 // Load deal grid layout
@@ -863,7 +846,6 @@ function loadDealGridLayout() {
     doctype: "CRM Pipeline Items",
   })
     .then((r) => {
-      console.log("deal grid layout response", r)
       dealGridLayout.value.data = r
     })
     .catch((e) => {
@@ -878,7 +860,6 @@ function loadPipelineGridLayout() {
     doctype: "CRM Master Pipeline Child",
   })
     .then((r) => {
-      console.log("pipeline grid layout response", r)
       pipelineGridLayout.value.data = r
     })
     .catch((e) => {
@@ -897,7 +878,6 @@ async function loadChildPipelinesWithDeals() {
     if (result && result.success) {
       childPipelinesWithDetailsData.value = result.child_pipelines || []
     } else {
-      console.error('Failed to load child pipelines with deals:', result?.error)
       childPipelinesWithDetailsData.value = []
     }
   } catch (error) {
@@ -906,17 +886,15 @@ async function loadChildPipelinesWithDeals() {
   }
 }
 
-// Watch for document changes to initialize local state and reload pipeline details
+// Watch for document changes
 watch(doc, async (newDoc) => {
   if (newDoc) {
     localLogs.value = newDoc.logs ? JSON.parse(JSON.stringify(newDoc.logs)) : []
     hasChanges.value = false
     
-    // Load grid layouts when document is available
     loadDealGridLayout()
     loadPipelineGridLayout()
     
-    // Load child pipelines with deal details when document changes
     if (newDoc.pipeline_type === 'Master Pipeline') {
       await loadChildPipelinesWithDeals()
     }
@@ -926,19 +904,14 @@ watch(doc, async (newDoc) => {
 // Watch for modal opening to reset form
 watch(showAddDealModal, (show) => {
   if (show && !editingDeal.value) {
-    // Reset for new deal
     newDeal.doc = {}
-    // Load the custom field layout
     dealTabs.reload()
   }
 })
 
-// Watch for pipeline modal opening to reset form
 watch(showAddPipelineModal, (show) => {
   if (show && !editingPipeline.value) {
-    // Reset for new pipeline
     newPipeline.doc = {}
-    // Load the custom field layout
     pipelineTabs.reload()
   }
 })
@@ -959,7 +932,7 @@ const statusOptions = computed(() => {
 // Current active tab
 const currentTab = computed(() => filteredTabs.value[tabIndex.value])
 
-// Tabs configuration with updated names and new Pipelines tab
+// Tabs configuration
 const tabs = computed(() => {
   let tabOptions = [
     {
@@ -1037,33 +1010,24 @@ async function saveDeal() {
   try {
     isAddingDeal.value = true
     
-    // Validate required fields
     if (!newDeal.doc.deal) {
       toast.error(__('Deal Name is required'))
       return
     }
 
-    console.log('Sending deal data:', newDeal.doc)
-
-    // Prepare deal data with all required fields
     const dealData = {
       deal: newDeal.doc.deal,
       deal_owner: newDeal.doc.deal_owner,
       deal_value: newDeal.doc.deal_value,
       probability: newDeal.doc.probability,
       expected_deal_value: newDeal.doc.expected_deal_value,
-      // Add any other fields from your form
       ...newDeal.doc
     }
 
-    // Remove parent fields as they're not needed in the API
     delete dealData.parent
     delete dealData.parenttype
     delete dealData.parentfield
 
-    console.log('Final deal data to send:', dealData)
-
-    // Call the link_deal_to_pipeline API
     const result = await call('crm_pipeline.api.link_deal_to_pipeline', 
       {
         pipeline: props.pipelineId,
@@ -1071,17 +1035,11 @@ async function saveDeal() {
       }
     )
 
-    console.log('Link deal response:', result)
-
     if (result && result.success) {
       toast.success(__('Deal added successfully'))
-      
-      // Close modal and reset
       showAddDealModal.value = false
       editingDeal.value = null
       newDeal.doc = {}
-      
-      // Reload the pipeline document to refresh the child table
       document.reload()
     } else {
       throw new Error(result?.error || __('Failed to add deal'))
@@ -1095,36 +1053,27 @@ async function saveDeal() {
   }
 }
 
-// Save pipeline function (using same logic as deals)
+// Save pipeline function
 async function savePipeline() {
   try {
     isAddingPipeline.value = true
     
-    // Validate required fields
     if (!newPipeline.doc.pipeline_name) {
       toast.error(__('Pipeline Name is required'))
       return
     }
 
-    console.log('Sending pipeline data:', newPipeline.doc)
-
-    // Prepare pipeline data
     const pipelineData = {
       pipeline_name: newPipeline.doc.pipeline_name,
       pipeline_owner: newPipeline.doc.pipeline_owner,
       status: newPipeline.doc.status || 'Active',
-      // Add any other fields from your form
       ...newPipeline.doc
     }
 
-    // Remove parent fields as they're not needed in the API
     delete pipelineData.parent
     delete pipelineData.parenttype
     delete pipelineData.parentfield
 
-    console.log('Final pipeline data to send:', pipelineData)
-
-    // Call the link_pipeline_to_master API (same pattern as deals)
     const result = await call('crm_pipeline.api.link_pipeline_to_master', 
       {
         pipeline: props.pipelineId,
@@ -1132,19 +1081,12 @@ async function savePipeline() {
       }
     )
 
-    console.log('Link pipeline response:', result)
-
     if (result && result.success) {
       toast.success(__('Pipeline added successfully'))
-      
-      // Close modal and reset
       showAddPipelineModal.value = false
       editingPipeline.value = null
       newPipeline.doc = {}
-      
-      // Reload the pipeline document to refresh the child table
       document.reload()
-      // Also reload the child pipelines with deals data
       await loadChildPipelinesWithDeals()
     } else {
       throw new Error(result?.error || __('Failed to add pipeline'))
@@ -1175,56 +1117,78 @@ function cancelAddPipeline() {
 // Delete deal function
 async function deleteDeal(dealName) {
   try {
-    
-      // Call API to delete the deal from child table
-      const result = await call('crm_pipeline.api.unlink_deal_from_pipeline', {
-        pipeline: props.pipelineId,
-        deal_name: dealName
-      })
+    const result = await call('crm_pipeline.api.unlink_deal_from_pipeline', {
+      pipeline: props.pipelineId,
+      deal_name: dealName
+    })
 
-      if (result && result.success) {
-        toast.success(__('Deal deleted successfully'))
-        
-        // Reload the pipeline document to refresh the child table
-        document.reload()
-      } else {
-        throw new Error(result?.error || __('Failed to delete deal'))
-      }
+    if (result && result.success) {
+      toast.success(__('Deal deleted successfully'))
+      document.reload()
+    } else {
+      throw new Error(result?.error || __('Failed to delete deal'))
+    }
   } catch (error) {
     console.error('Error deleting deal:', error)
     toast.error(__('Failed to delete deal: {0}', [error.message]))
   }
 }
 
-// Delete pipeline function (using same logic as deals)
+// Delete pipeline function
 async function deletePipeline(pipelineName) {
   try {
-    
-      // Call API to delete the pipeline from child table
-      const result = await call('crm_pipeline.api.unlink_pipeline_from_master', {
-        pipeline: props.pipelineId,
-        pipeline_name: pipelineName
-      })
+    const result = await call('crm_pipeline.api.unlink_pipeline_from_master', {
+      pipeline: props.pipelineId,
+      pipeline_name: pipelineName
+    })
 
-      if (result && result.success) {
-        toast.success(__('Pipeline deleted successfully'))
-        
-        // Reload the pipeline document to refresh the child table
-        document.reload()
-        // Also reload the child pipelines with deals data
-        await loadChildPipelinesWithDeals()
-      } else {
-        throw new Error(result?.error || __('Failed to delete pipeline'))
-      }
+    if (result && result.success) {
+      toast.success(__('Pipeline deleted successfully'))
+      document.reload()
+      await loadChildPipelinesWithDeals()
+    } else {
+      throw new Error(result?.error || __('Failed to delete pipeline'))
+    }
   } catch (error) {
     console.error('Error deleting pipeline:', error)
     toast.error(__('Failed to delete pipeline: {0}', [error.message]))
   }
 }
 
-// View pipeline function
-function viewPipeline(pipelineName) {
-  router.push({ name: 'Pipeline', params: { pipelineId: pipelineName } })
+// Convert to Deal function
+async function convertToDeal() {
+  if (existingContactChecked.value && !existingContact.value) {
+    toast.error(__('Please select an existing contact'))
+    return
+  }
+
+  if (existingOrganizationChecked.value && !existingOrganization.value) {
+    toast.error(__('Please select an existing organization'))
+    return
+  }
+
+  if (!existingContactChecked.value && existingContact.value) {
+    existingContact.value = ''
+  }
+
+  if (!existingOrganizationChecked.value && existingOrganization.value) {
+    existingOrganization.value = ''
+  }
+
+  let deal = await call('crm.fcrm.doctype.crm_pipeline.crm_pipeline.convert_to_deal', {
+    pipeline: props.pipelineId,
+    deal: {},
+    existing_contact: existingContact.value,
+    existing_organization: existingOrganization.value,
+  })
+  if (deal) {
+    showConvertToDealModal.value = false
+    existingContactChecked.value = false
+    existingOrganizationChecked.value = false
+    existingContact.value = ''
+    existingOrganization.value = ''
+    router.push({ name: 'Deal', params: { dealId: deal } })
+  }
 }
 
 // Format currency
@@ -1258,12 +1222,8 @@ async function changePipelineStatus(newStatus) {
 // Save all changes
 async function saveAllChanges() {
   try {
-    // Update logs
     doc.value.logs = localLogs.value
-    
-    // Save the document
     await document.save.submit()
-    
     hasChanges.value = false
     toast.success(__('Changes saved successfully'))
   } catch (error) {
@@ -1273,13 +1233,6 @@ async function saveAllChanges() {
 
 // Existing functions
 const { tabIndex, changeTabTo } = useActiveTabManager(tabs, 'lastPipelineTab')
-
-const sections = createResource({
-  url: 'crm.fcrm.doctype.crm_fields_layout.crm_fields_layout.get_sidepanel_sections',
-  cache: ['sidePanelSections', 'CRM Pipeline'],
-  params: { doctype: 'CRM Pipeline' },
-  auto: true,
-})
 
 const breadcrumbs = computed(() => {
   let items = [{ label: __('Pipelines'), route: { name: 'Pipelines' } }]
@@ -1351,11 +1304,6 @@ watch(
   { once: true },
 )
 
-async function triggerStatusChange(value) {
-  await triggerOnChange('status', value)
-  document.save.submit()
-}
-
 function updateField(name, value) {
   value = Array.isArray(name) ? '' : value
   let oldValues = Array.isArray(name) ? {} : doc.value[name]
@@ -1409,8 +1357,6 @@ function formatDate(dateString) {
   try {
     const date = new Date(dateString)
     if (isNaN(date.getTime())) return dateString
-    
-    // Use browser's locale for formatting
     return date.toLocaleString()
   } catch (error) {
     return dateString

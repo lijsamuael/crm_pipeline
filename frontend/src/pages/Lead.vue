@@ -35,7 +35,7 @@
         </template>
       </Dropdown>
       <Button
-        :label="__('Convert to Lead')"
+        :label="__('Convert to Deal')"
         variant="solid"
         @click="showConvertToDealModal = true"
       />
@@ -218,6 +218,45 @@
     :docname="leadId"
     name="Leads"
   />
+  <Dialog
+    v-if="showErrorModal"
+    v-model="showErrorModal"
+    :options="{ size: 'md' }"
+  >
+    <template #body-header>
+      <div class="mb-6 flex items-center justify-between">
+        <h3 class="text-2xl font-semibold leading-6 text-ink-gray-9">
+          {{ errorModalTitle }}
+        </h3>
+        <Button icon="x" variant="ghost" @click="showErrorModal = false" />
+      </div>
+    </template>
+    <template #body-content>
+      <div class="flex flex-col space-y-4">
+        <div class="mb-4 flex items-center justify-center text-red-600">
+          <Icon icon="alert-circle" class="h-12 w-12" />
+        </div>
+        <div class="text-center">
+          <p class="text-gray-700">{{ errorModalMessage }}</p>
+        </div>
+      </div>
+    </template>
+    <template #actions>
+      <div class="flex justify-end space-x-2">
+        <Button
+          variant="solid"
+          theme="blue"
+          :label="__('Try Again')"
+          @click="retryPipelineConversion"
+        />
+        <Button
+          variant="subtle"
+          :label="__('Close')"
+          @click="showErrorModal = false"
+        />
+      </div>
+    </template>
+  </Dialog>
 </template>
 <script setup>
 import DeleteLinkedDocModal from '@/components/DeleteLinkedDocModal.vue'
@@ -269,6 +308,8 @@ import {
   call,
   usePageMeta,
   toast,
+  Dialog,
+  Button,
 } from 'frappe-ui'
 import { ref, computed, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
@@ -294,6 +335,12 @@ const activities = ref(null)
 const errorTitle = ref('')
 const errorMessage = ref('')
 const showDeleteLinkedDocModal = ref(false)
+const showFilesUploader = ref(false)
+const showConvertToDealModal = ref(false)
+const showErrorModal = ref(false)
+const errorModalTitle = ref('')
+const errorModalMessage = ref('')
+
 const createPipeline = () => {
   //make a request to api.convert_lead_to_pipeline with lead_name
   call('crm_pipeline.api.create_pipeline_from_lead', {
@@ -301,14 +348,77 @@ const createPipeline = () => {
   })
     .then((r) => {
       toast.success(__('Lead converted to Pipeline successfully'))
-      router.push({ name: 'Pipeline'})
+      // r should be the pipeline name returned from the API
+      if (r) {
+        router.push({ name: 'Pipeline', params: { pipelineId: r } })
+      } else {
+        // Fallback to Pipelines list if no pipeline ID returned
+        router.push({ name: 'Pipelines' })
+      }
     })
     .catch((e) => {
-      toast.error(e.message || __('Failed to convert Lead to Pipeline'))
+      errorModalTitle.value = __('Conversion Failed')
+      // Extract the actual error message from frappe-ui error object
+      let errorMsg = __('Failed to convert Lead to Pipeline')
+      
+      // Priority 1: Check messages array (most common for ValidationError)
+      if (e?.messages && Array.isArray(e.messages) && e.messages.length > 0) {
+        errorMsg = e.messages[0]
+      }
+      // Priority 2: Check _server_messages
+      else if (e?._server_messages) {
+        try {
+          const serverMessages = JSON.parse(e._server_messages)
+          if (Array.isArray(serverMessages) && serverMessages.length > 0) {
+            const msg = serverMessages[0]
+            // Handle both string and object messages
+            errorMsg = typeof msg === 'string' ? msg : msg.message || msg.title || String(msg)
+          } else if (typeof serverMessages === 'string') {
+            errorMsg = serverMessages
+          }
+        } catch (parseError) {
+          errorMsg = e._server_messages
+        }
+      }
+      // Priority 3: Check exc (exception) - extract the actual message from traceback
+      else if (e?.exc) {
+        try {
+          const exc = typeof e.exc === 'string' ? JSON.parse(e.exc) : e.exc
+          if (Array.isArray(exc)) {
+            // Get the last line which usually contains the actual error message
+            errorMsg = exc[exc.length - 1] || exc.join('\n')
+          } else if (typeof exc === 'string') {
+            // Extract the actual message (usually after the last colon or on the last line)
+            const lines = exc.split('\n').filter(line => line.trim())
+            const lastLine = lines[lines.length - 1] || exc
+            // Try to extract message after "ValidationError: " or similar
+            const match = lastLine.match(/:\s*(.+)$/)
+            errorMsg = match ? match[1] : lastLine
+          }
+        } catch (parseError) {
+          const excStr = String(e.exc)
+          const lines = excStr.split('\n').filter(line => line.trim())
+          const lastLine = lines[lines.length - 1] || excStr
+          const match = lastLine.match(/:\s*(.+)$/)
+          errorMsg = match ? match[1] : lastLine
+        }
+      }
+      // Priority 4: Check message property and try to extract meaningful part
+      else if (e?.message) {
+        // If message contains "ValidationError", try to extract the actual message
+        const match = e.message.match(/ValidationError[:\s]+(.+)$/i)
+        errorMsg = match ? match[1].trim() : e.message
+      }
+      
+      errorModalMessage.value = errorMsg
+      showErrorModal.value = true
     })
 }
-const showFilesUploader = ref(false)
-const showConvertToDealModal = ref(false)
+
+const retryPipelineConversion = () => {
+  showErrorModal.value = false
+  createPipeline()
+}
 
 
 const { triggerOnChange, assignees, document, scripts, error } = useDocument(
