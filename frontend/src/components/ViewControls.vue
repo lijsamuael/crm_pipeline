@@ -510,6 +510,19 @@ list.value = createResource({
   cache: [props.doctype, route.query.view, route.params.viewType],
   auto: true,
   onSuccess(data) {
+    // Ensure kanban columns have delete property (for compatibility)
+    if (data.view_type === 'kanban' && data.data && Array.isArray(data.data)) {
+      data.data = data.data.map((item) => {
+        if (item && item.column) {
+          // Ensure delete property exists
+          if (item.column.delete === undefined) {
+            item.column.delete = false
+          }
+        }
+        return item
+      })
+    }
+    
     let cv = getView(route.query.view, route.params.viewType, props.doctype)
     let params = list.value.params ? list.value.params : getParams()
     defaultParams.value = {

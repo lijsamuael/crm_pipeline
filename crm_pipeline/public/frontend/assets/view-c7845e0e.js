@@ -1,0 +1,2 @@
+import{L as r,G as l,K as c}from"./FadedScrollableDiv-5644784d.js";import{b8 as p,U as n}from"./index-a9642f4f.js";const{getView:b}=p();function o(i){return{list:{label:__("List"),icon:n(r)},group_by:{label:__("Group By"),icon:n(l)},kanban:{label:__("Kanban"),icon:n(c)}}[i]}function _(i,a,s){let t=a||"list",e=b(i,t,s);return e&&!e.icon&&(e.icon=o(t).icon),e||o(t)}export{_ as g};
+//# sourceMappingURL=view-c7845e0e.js.map
