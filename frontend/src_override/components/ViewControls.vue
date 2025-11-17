@@ -510,6 +510,53 @@ list.value = createResource({
   cache: [props.doctype, route.query.view, route.params.viewType],
   auto: true,
   onSuccess(data) {
+    // Transform data for CRM Pipeline if needed
+    if (props.doctype === 'CRM Pipeline') {
+      // Ensure kanban data has correct structure with delete property
+      if (data.view_type === 'kanban' && data.data) {
+        if (Array.isArray(data.data)) {
+          // Filter out invalid items and ensure structure
+          data.data = data.data
+            .filter((item) => item && item.column) // Remove items without column
+            .map((item) => {
+              // Ensure column object exists and has delete property
+              if (!item.column) {
+                item.column = {}
+              }
+              if (item.column.delete === undefined) {
+                item.column.delete = false
+              }
+              // Ensure fields and data arrays exist
+              if (!item.fields) {
+                item.fields = data.kanban_fields || []
+              }
+              if (!item.data) {
+                item.data = []
+              }
+              return item
+            })
+        }
+      }
+      
+      // Ensure columns and rows are properly set for list view
+      if (data.view_type === 'list' && !data.columns && data.fields) {
+        // Use default columns if none provided
+        data.columns = [
+          {"label": "Pipeline Name", "type": "Data", "key": "pipeline_name", "width": "12rem"},
+          {"label": "Organization", "type": "Link", "key": "organization", "options": "CRM Organization", "width": "10rem"},
+          {"label": "Status", "type": "Link", "key": "status", "options": "CRM Pipeline Status", "width": "8rem"},
+          {"label": "Pipeline Owner", "type": "Link", "key": "pipeline_owner", "options": "User", "width": "10rem"},
+          {"label": "Email", "type": "Data", "key": "email", "width": "12rem"},
+          {"label": "Mobile No", "type": "Data", "key": "mobile_no", "width": "11rem"},
+          {"label": "Last Modified", "type": "Datetime", "key": "modified", "width": "8rem"},
+        ]
+      }
+      
+      if (data.view_type === 'list' && !data.rows && data.fields) {
+        data.rows = data.fields.map(f => f.value || f.fieldname).filter(Boolean)
+      }
+    }
+    
     let cv = getView(route.query.view, route.params.viewType, props.doctype)
     let params = list.value.params ? list.value.params : getParams()
     defaultParams.value = {
