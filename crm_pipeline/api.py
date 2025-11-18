@@ -216,10 +216,6 @@ def convert_to_deal(pipeline, deal=None, existing_contact=None, existing_organiz
             "deal_owner": pipeline_doc.pipeline_owner or frappe.session.user,
             "lead": pipeline_doc.lead,
             "source": pipeline_doc.source,
-            "no_of_employees": pipeline_doc.no_of_employees,
-            "territory": pipeline_doc.territory,
-            "currency": pipeline_doc.currency,
-            "exchange_rate": pipeline_doc.exchange_rate,
             "email": pipeline_doc.email,
             "mobile_no": pipeline_doc.mobile_no,
         }
