@@ -358,167 +358,358 @@ def unlink_deal_from_pipeline(pipeline, deal_name):
         
         
 @frappe.whitelist()
-def get_data(doctype, filters=None, order_by=None, **kwargs):
-    """
-    Override the default get_data API for CRM Pipeline
-    """
-    
-    # Only handle CRM Pipeline, pass everything else through
-    if doctype != "CRM Pipeline":
-        from crm.api.doc import get_data as original_get_data
-        
-        # Prepare parameters for the original function, excluding 'cmd'
-        original_kwargs = {k: v for k, v in kwargs.items() if k != 'cmd'}
-        return original_get_data(doctype, filters, order_by, **original_kwargs)
-    
-    # CRM Pipeline specific handling
-    try:
-        # Get all relevant fields from your doctype
-        fields = [
-            "name", "pipeline_name", "organization", "status", 
-            "pipeline_owner", "est_pipeline_value", "total_deal_value",
-            "email", "mobile_no", "lead", "lead_name", "source",
-            "organization_name", "website", "territory", "modified",
-            "creation", "_assign"
-        ]
-        
-        # Parse filters
-        if isinstance(filters, str):
-            filters = frappe.parse_json(filters)
-        elif filters is None:
-            filters = {}
-            
-        # Set default order_by
-        if not order_by:
-            order_by = 'modified desc'
-            
-        # Get pagination parameters (filter out 'cmd')
-        safe_kwargs = {k: v for k, v in kwargs.items() if k != 'cmd'}
-        page_length = int(safe_kwargs.get('page_length', 20))
-        page_length_count = int(safe_kwargs.get('page_length_count', 20))
-        
-        # Get view parameters
-        view = safe_kwargs.get('view', {})
-        if isinstance(view, str):
-            view = frappe.parse_json(view)
-        view_type = view.get('view_type', 'list')
-        group_by_field = view.get('group_by_field', 'owner')
-        
-        # Get other view-related parameters
-        column_field = safe_kwargs.get('column_field', 'status')
-        title_field = safe_kwargs.get('title_field', '')
-        
-        # Get kanban parameters
-        kanban_columns = safe_kwargs.get('kanban_columns', '[]')
-        if isinstance(kanban_columns, str):
-            try:
-                kanban_columns = frappe.parse_json(kanban_columns)
-            except:
-                kanban_columns = []
-        elif not kanban_columns:
-            kanban_columns = []
-            
-        kanban_fields = safe_kwargs.get('kanban_fields', '[]')
-        if isinstance(kanban_fields, str):
-            try:
-                kanban_fields = frappe.parse_json(kanban_fields)
-            except:
-                kanban_fields = []
-        elif not kanban_fields:
-            kanban_fields = []
-        
-        # Get the actual data
-        data = frappe.get_all(
-            doctype,
-            fields=fields,
-            filters=filters,
-            order_by=order_by,
-            limit_page_length=page_length
-        )
-        
-        # Get total count for pagination
-        total_count = frappe.db.count(doctype, filters)
-        
-        # Get field metadata for column selection
-        meta = frappe.get_meta(doctype)
-        all_fields = []
-        for field in meta.fields:
-            if field.fieldtype not in ['Section Break', 'Column Break', 'Tab Break']:
-                all_fields.append({
-                    "label": field.label,
-                    "value": field.fieldname,
-                    "type": field.fieldtype,
-                    "options": field.options
-                })
-        
-        # Get columns from request (saved view) or use defaults
-        columns = safe_kwargs.get('columns')
-        if columns:
-            # Parse if it's a string
-            if isinstance(columns, str):
-                try:
-                    columns = frappe.parse_json(columns)
-                except:
-                    columns = None
-        
-        # If no columns provided, use defaults
-        if not columns:
-            columns = [
-                {"label": "Pipeline Name", "type": "Data", "key": "pipeline_name", "width": "12rem"},
-                {"label": "Organization", "type": "Link", "key": "organization", "options": "CRM Organization", "width": "10rem"},
-                {"label": "Status", "type": "Link", "key": "status", "options": "CRM Pipeline Status", "width": "8rem"},
-                {"label": "Pipeline Owner", "type": "Link", "key": "pipeline_owner", "options": "User", "width": "10rem"},
-                {"label": "Est Pipeline Value", "type": "Data", "key": "est_pipeline_value", "width": "10rem"},
-                {"label": "Email", "type": "Data", "key": "email", "width": "12rem"},
-                {"label": "Mobile No", "type": "Data", "key": "mobile_no", "width": "11rem"},
-                {"label": "Last Modified", "type": "Datetime", "key": "modified", "width": "8rem"},
-            ]
-        
-        # Get rows from request (saved view) or use defaults
-        rows = safe_kwargs.get('rows')
-        if rows:
-            # Parse if it's a string
-            if isinstance(rows, str):
-                try:
-                    rows = frappe.parse_json(rows)
-                except:
-                    rows = None
-        
-        # If no rows provided, use default fields
-        if not rows:
-            rows = fields
-        
-        return {
-            "data": data,
-            "columns": columns,
-            "rows": rows,
-            "fields": all_fields,
-            "column_field": column_field,
-            "title_field": title_field,
-            "kanban_columns": kanban_columns,
-            "kanban_fields": kanban_fields,
-            "group_by_field": group_by_field,
-            "page_length": page_length,
-            "page_length_count": page_length_count,
-            "total_count": total_count,
-            "row_count": len(data),
-            "view_type": view_type,
-            "is_default": False
-        }
-        
-    except Exception as e:
-        frappe.log_error(f"Error in CRM Pipeline get_data: {str(e)}")
-        # Return minimal fallback structure
-        return {
-            "columns": [],
-            "rows": [],
-            "total_count": 0,
-            "row_count": 0,
-            "data": [],
-            "page_length": 20,
-            "page_length_count": 20,
-            "fields": []  # Empty fields array as fallback
-        }
+def get_data(
+	doctype: str,
+	filters: dict = None,
+	order_by: str = None,
+	page_length=20,
+	page_length_count=20,
+	column_field=None,
+	title_field=None,
+	columns=[],
+	rows=[],
+	kanban_columns=[],
+	kanban_fields=[],
+	view=None,
+	default_filters=None,
+):
+	"""
+	Override the default get_data API to properly handle CRM Pipeline controller lookup.
+	For CRM Pipeline, we import the controller directly to avoid get_controller issues.
+	For all other doctypes, we call the original CRM get_data.
+	"""
+	# Import the original get_data function
+	from crm.api.doc import get_data as original_get_data
+	from frappe.model.document import get_controller
+	from frappe.model import no_value_fields
+	import json
+	
+	# For CRM Pipeline, handle controller lookup manually
+	if doctype == "CRM Pipeline":
+		try:
+			# Import CRMPipeline controller directly
+			from crm_pipeline.doctype.crm_pipeline.crm_pipeline import CRMPipeline
+			_list = CRMPipeline
+		except ImportError:
+			# Fallback: try to get controller normally
+			try:
+				_list = get_controller(doctype)
+			except:
+				# If all else fails, use Document base class
+				from frappe.model.document import Document
+				_list = Document
+	else:
+		# For all other doctypes, use the original function
+		return original_get_data(
+			doctype=doctype,
+			filters=filters,
+			order_by=order_by,
+			page_length=page_length,
+			page_length_count=page_length_count,
+			column_field=column_field,
+			title_field=title_field,
+			columns=columns,
+			rows=rows,
+			kanban_columns=kanban_columns,
+			kanban_fields=kanban_fields,
+			view=view,
+			default_filters=default_filters,
+		)
+	
+	# Rest of the function is identical to the original CRM get_data
+	# but uses _list (CRMPipeline) instead of get_controller(doctype)
+	custom_view = False
+	filters = frappe._dict(filters or {})
+	rows = frappe.parse_json(rows or "[]")
+	columns = frappe.parse_json(columns or "[]")
+	kanban_fields = frappe.parse_json(kanban_fields or "[]")
+	kanban_columns = frappe.parse_json(kanban_columns or "[]")
+
+	custom_view_name = view.get("custom_view_name") if view else None
+	view_type = view.get("view_type") if view else None
+	group_by_field = view.get("group_by_field") if view else None
+
+	for key in filters:
+		value = filters[key]
+		if isinstance(value, list):
+			if "@me" in value:
+				value[value.index("@me")] = frappe.session.user
+			elif "%@me%" in value:
+				index = [i for i, v in enumerate(value) if v == "%@me%"]
+				for i in index:
+					value[i] = "%" + frappe.session.user + "%"
+		elif value == "@me":
+			filters[key] = frappe.session.user
+
+	if default_filters:
+		default_filters = frappe.parse_json(default_filters)
+		filters.update(default_filters)
+
+	is_default = True
+	data = []
+	default_rows = []
+	if hasattr(_list, "default_list_data"):
+		default_rows = _list.default_list_data().get("rows")
+
+	meta = frappe.get_meta(doctype)
+
+	if view_type != "kanban":
+		if columns or rows:
+			custom_view = True
+			is_default = False
+			columns = frappe.parse_json(columns)
+			rows = frappe.parse_json(rows)
+
+		if not columns:
+			columns = [
+				{"label": "Name", "type": "Data", "key": "name", "width": "16rem"},
+				{"label": "Last Modified", "type": "Datetime", "key": "modified", "width": "8rem"},
+			]
+
+		if not rows:
+			rows = ["name"]
+
+		default_view_filters = {
+			"dt": doctype,
+			"type": view_type or "list",
+			"is_standard": 1,
+			"user": frappe.session.user,
+		}
+
+		if not custom_view and frappe.db.exists("CRM View Settings", default_view_filters):
+			list_view_settings = frappe.get_doc("CRM View Settings", default_view_filters)
+			columns = frappe.parse_json(list_view_settings.columns)
+			rows = frappe.parse_json(list_view_settings.rows)
+			is_default = False
+		elif not custom_view or (is_default and hasattr(_list, "default_list_data")):
+			rows = default_rows
+			columns = _list.default_list_data().get("columns")
+
+		# check if rows has all keys from columns if not add them
+		for column in columns:
+			if column.get("key") not in rows:
+				rows.append(column.get("key"))
+			column["label"] = _(column.get("label"))
+
+			if column.get("key") == "_liked_by" and column.get("width") == "10rem":
+				column["width"] = "50px"
+
+			# remove column if column.hidden is True
+			column_meta = meta.get_field(column.get("key"))
+			if column_meta and column_meta.get("hidden"):
+				columns.remove(column)
+
+		# check if rows has group_by_field if not add it
+		if group_by_field and group_by_field not in rows:
+			rows.append(group_by_field)
+
+		data = (
+			frappe.get_list(
+				doctype,
+				fields=rows,
+				filters=filters,
+				order_by=order_by,
+				page_length=page_length,
+			)
+			or []
+		)
+		# Import parse_list_data from crm.api.doc
+		from crm.api.doc import parse_list_data
+		data = parse_list_data(data, doctype)
+
+	if view_type == "kanban":
+		if not rows:
+			rows = default_rows
+
+		if not kanban_columns and column_field:
+			field_meta = frappe.get_meta(doctype).get_field(column_field)
+			if field_meta.fieldtype == "Link":
+				kanban_columns = frappe.get_all(
+					field_meta.options,
+					fields=["name"],
+					order_by="modified asc",
+				)
+			elif field_meta.fieldtype == "Select":
+				kanban_columns = [{"name": option} for option in field_meta.options.split("\n")]
+
+		if not title_field:
+			title_field = "name"
+			if hasattr(_list, "default_kanban_settings"):
+				title_field = _list.default_kanban_settings().get("title_field")
+
+		if title_field not in rows:
+			rows.append(title_field)
+
+		if not kanban_fields:
+			kanban_fields = ["name"]
+			if hasattr(_list, "default_kanban_settings"):
+				kanban_fields = json.loads(_list.default_kanban_settings().get("kanban_fields"))
+
+		for field in kanban_fields:
+			if field not in rows:
+				rows.append(field)
+
+		# Import convert_filter_to_tuple and get_records_based_on_order from crm.api.doc
+		from crm.api.doc import convert_filter_to_tuple, get_records_based_on_order
+		
+		for kc in kanban_columns:
+			# Ensure delete property exists (default to False)
+			if "delete" not in kc:
+				kc["delete"] = False
+			
+			# Start with base filters
+			column_filters = []
+
+			# Convert and add the main filters first
+			if filters:
+				base_filters = convert_filter_to_tuple(doctype, filters)
+				column_filters.extend(base_filters)
+
+			# Add the column-specific filter
+			if column_field and kc.get("name"):
+				column_filters.append([doctype, column_field, "=", kc.get("name")])
+
+			order = kc.get("order")
+			if kc.get("delete"):
+				column_data = []
+			else:
+				page_length = kc.get("page_length", 20)
+
+				if order:
+					column_data = get_records_based_on_order(
+						doctype, rows, column_filters, page_length, order
+					)
+				else:
+					column_data = frappe.get_list(
+						doctype,
+						fields=rows,
+						filters=column_filters,
+						order_by=order_by,
+						page_length=page_length,
+					)
+
+				all_count = frappe.get_list(
+					doctype,
+					filters=column_filters,
+					fields="count(*) as total_count",
+				)[0].total_count
+
+				kc["all_count"] = all_count
+				kc["count"] = len(column_data)
+
+			if order:
+				column_data = sorted(
+					column_data,
+					key=lambda x: order.index(x.get("name")) if x.get("name") in order else len(order),
+				)
+
+			data.append({"column": kc, "fields": kanban_fields, "data": column_data})
+
+	fields = frappe.get_meta(doctype).fields
+	fields = [field for field in fields if field.fieldtype not in no_value_fields]
+	fields = [
+		{
+			"label": _(field.label),
+			"fieldtype": field.fieldtype,
+			"fieldname": field.fieldname,
+			"options": field.options,
+		}
+		for field in fields
+		if field.label and field.fieldname
+	]
+
+	std_fields = [
+		{"label": "Name", "fieldtype": "Data", "fieldname": "name"},
+		{"label": "Created On", "fieldtype": "Datetime", "fieldname": "creation"},
+		{"label": "Last Modified", "fieldtype": "Datetime", "fieldname": "modified"},
+		{
+			"label": "Modified By",
+			"fieldtype": "Link",
+			"fieldname": "modified_by",
+			"options": "User",
+		},
+		{"label": "Assigned To", "fieldtype": "Text", "fieldname": "_assign"},
+		{"label": "Owner", "fieldtype": "Link", "fieldname": "owner", "options": "User"},
+		{"label": "Like", "fieldtype": "Data", "fieldname": "_liked_by"},
+	]
+
+	for field in std_fields:
+		if field.get("fieldname") not in rows:
+			rows.append(field.get("fieldname"))
+		if field not in fields:
+			field["label"] = _(field["label"])
+			fields.append(field)
+
+	if not is_default and custom_view_name:
+		is_default = frappe.db.get_value("CRM View Settings", custom_view_name, "load_default_columns")
+
+	if group_by_field and view_type == "group_by":
+		group_by_field_name = group_by_field
+
+		def get_options(type, options):
+			if type == "Select":
+				return [option for option in options.split("\n")]
+			else:
+				has_empty_values = any([not d.get(group_by_field_name) for d in data])
+				options = list(set([d.get(group_by_field_name) for d in data]))
+				options = [u for u in options if u]
+				if has_empty_values:
+					options.append("")
+
+				if order_by and group_by_field_name in order_by:
+					order_by_fields = order_by.split(",")
+					order_by_fields = [
+						(field.split(" ")[0], field.split(" ")[1]) for field in order_by_fields
+					]
+					if (group_by_field_name, "asc") in order_by_fields:
+						options.sort()
+					elif (group_by_field_name, "desc") in order_by_fields:
+						options.sort(reverse=True)
+				else:
+					options.sort()
+				return options
+
+		group_by_field_dict = None
+		for field in fields:
+			if field.get("fieldname") == group_by_field_name:
+				group_by_field_dict = {
+					"label": field.get("label"),
+					"fieldname": field.get("fieldname"),
+					"fieldtype": field.get("fieldtype"),
+					"options": field.get("options"),
+				}
+				break
+
+		if group_by_field_dict:
+			options = get_options(group_by_field_dict.get("fieldtype"), group_by_field_dict.get("options"))
+		else:
+			group_by_field_meta = meta.get_field(group_by_field_name)
+			options = get_options(group_by_field_meta.fieldtype, group_by_field_meta.options)
+
+		grouped_data = {}
+		for option in options:
+			grouped_data[option] = [d for d in data if d.get(group_by_field_name) == option]
+
+		data = grouped_data
+		group_by_field = group_by_field_dict or group_by_field_name
+
+	# Import get_views from crm.api.views
+	from crm.api.views import get_views
+	
+	return {
+		"data": data,
+		"columns": columns,
+		"rows": rows,
+		"fields": fields,
+		"column_field": column_field,
+		"title_field": title_field,
+		"kanban_columns": kanban_columns,
+		"kanban_fields": kanban_fields,
+		"group_by_field": group_by_field,
+		"view_type": view_type,
+		"is_default": is_default,
+		"views": get_views(doctype),
+	}
         
 
         
