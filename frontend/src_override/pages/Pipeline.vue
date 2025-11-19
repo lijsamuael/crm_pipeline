@@ -18,26 +18,16 @@
       />
       <AssignTo v-model="assignees.data" doctype="CRM Pipeline" :docname="pipelineId" />
 
-      <!-- Current Status Indicator -->
-      <Badge
-        v-if="doc.status"
-        variant="subtle"
-        class="mr-2 flex items-center gap-1.5 capitalize"
-      >
-        <IndicatorIcon :class="getPipelineStatus(doc.status).color" />
-        {{ doc.status }}
-      </Badge>
-
-      <!-- Change Status Button -->
+      <!-- Status Indicator & Change Control -->
       <Dropdown
+        v-if="doc.status"
         :options="statusOptions"
         placement="right"
       >
         <template #default="{ open }">
           <Button
-            :label="__('Change Status')"
+            :label="doc.status"
             :iconRight="open ? 'chevron-up' : 'chevron-down'"
-            variant="outline"
           >
             <template #prefix>
               <IndicatorIcon :class="getPipelineStatus(doc.status).color" />
