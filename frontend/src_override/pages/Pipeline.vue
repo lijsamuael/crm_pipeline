@@ -17,7 +17,17 @@
         :actions="document.actions"
       />
       <AssignTo v-model="assignees.data" doctype="CRM Pipeline" :docname="pipelineId" />
-      
+
+      <!-- Current Status Indicator -->
+      <Badge
+        v-if="doc.status"
+        variant="subtle"
+        class="mr-2 flex items-center gap-1.5 capitalize"
+      >
+        <IndicatorIcon :class="getPipelineStatus(doc.status).color" />
+        {{ doc.status }}
+      </Badge>
+
       <!-- Change Status Button -->
       <Dropdown
         :options="statusOptions"

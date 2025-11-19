@@ -184,9 +184,103 @@ def set_status_from_type(doc, method):
     """
     if doc.type:
         doc.status = doc.type
-        
-        
-        
+
+
+def _ensure_pipeline_organization(pipeline_doc, selected_org=None):
+    """Return a valid CRM Organization docname and its display name, creating one when needed."""
+
+    def _get_display_name(org_name):
+        if not org_name:
+            return None
+        return frappe.db.get_value("CRM Organization", org_name, "organization_name")
+
+    if selected_org:
+        return selected_org, _get_display_name(selected_org)
+
+    if pipeline_doc.get("organization") and frappe.db.exists("CRM Organization", pipeline_doc.organization):
+        return pipeline_doc.organization, _get_display_name(pipeline_doc.organization) or pipeline_doc.get("organization_name")
+
+    org_label = pipeline_doc.get("organization_name")
+    if org_label:
+        existing = frappe.db.get_value("CRM Organization", {"organization_name": org_label}, "name")
+        if existing:
+            return existing, org_label
+
+    fallback_label = org_label or pipeline_doc.get("pipeline_name") or pipeline_doc.get("lead_name")
+    if fallback_label:
+        existing = frappe.db.get_value("CRM Organization", {"organization_name": fallback_label}, "name")
+        if existing:
+            return existing, fallback_label
+        org_doc = frappe.get_doc({
+            "doctype": "CRM Organization",
+            "organization_name": fallback_label,
+            "website": pipeline_doc.get("website"),
+            "territory": pipeline_doc.get("territory"),
+        })
+        if pipeline_doc.get("email"):
+            org_doc.email = pipeline_doc.get("email")
+        if pipeline_doc.get("mobile_no"):
+            org_doc.phone = pipeline_doc.get("mobile_no")
+        org_doc.insert(ignore_permissions=True)
+        return org_doc.name, org_doc.organization_name
+
+    return None, None
+
+
+def _ensure_pipeline_contact(pipeline_doc, selected_contact=None):
+    """Return a valid Contact docname, creating one if required."""
+    if selected_contact and frappe.db.exists("Contact", selected_contact):
+        return selected_contact
+
+    for link_field in ("contact_person", "contact"):
+        link_value = pipeline_doc.get(link_field)
+        if link_value and frappe.db.exists("Contact", link_value):
+            return link_value
+
+    if pipeline_doc.get("email"):
+        existing_contact = frappe.db.get_value("Contact Email", {"email_id": pipeline_doc.email}, "parent")
+        if existing_contact:
+            return existing_contact
+    if pipeline_doc.get("mobile_no"):
+        existing_contact = frappe.db.get_value("Contact Phone", {"phone": pipeline_doc.mobile_no}, "parent")
+        if existing_contact:
+            return existing_contact
+
+    lead_doc = None
+    if pipeline_doc.get("lead"):
+        try:
+            lead_doc = frappe.get_doc("CRM Lead", pipeline_doc.lead)
+        except Exception:
+            lead_doc = None
+
+    first_name = (
+        getattr(lead_doc, "first_name", None)
+        or pipeline_doc.get("lead_name")
+        or pipeline_doc.get("pipeline_name")
+        or _("Pipeline Contact")
+    )
+    last_name = getattr(lead_doc, "last_name", None) if lead_doc else None
+    email = pipeline_doc.get("email") or (getattr(lead_doc, "email_id", None) if lead_doc else None)
+    mobile = pipeline_doc.get("mobile_no") or (getattr(lead_doc, "mobile_no", None) if lead_doc else None)
+
+    if not first_name and not email and not mobile:
+        return None
+
+    contact_doc = frappe.get_doc({
+        "doctype": "Contact",
+        "first_name": first_name or _("Pipeline Contact"),
+    })
+    if last_name:
+        contact_doc.last_name = last_name
+    if email:
+        contact_doc.append("email_ids", {"email_id": email, "is_primary": 1})
+    if mobile:
+        contact_doc.append("phone_nos", {"phone": mobile, "is_primary_mobile_no": 1})
+
+    contact_doc.insert(ignore_permissions=True)
+    return contact_doc.name
+
+
 @frappe.whitelist()
 def convert_to_deal(pipeline, deal=None, existing_contact=None, existing_organization=None):
     """Create a Deal from a Pipeline with proper field mapping"""
@@ -203,13 +297,27 @@ def convert_to_deal(pipeline, deal=None, existing_contact=None, existing_organiz
         print(f"✅ Pipeline loaded: {pipeline_doc.name}")
         print(f"📊 Pipeline data - lead_name: {pipeline_doc.lead_name}, organization: {pipeline_doc.organization}")
 
+        organization_name, organization_display_name = _ensure_pipeline_organization(
+            pipeline_doc, existing_organization
+        )
+
+        if not organization_name:
+            frappe.throw(
+                _("Unable to determine an organization for this pipeline. Please add organization details before converting.")
+            )
+
+        contact_name = _ensure_pipeline_contact(pipeline_doc, existing_contact)
+
+        print(f"🏢 Using organization: {organization_name} ({organization_display_name})")
+        print(f"👤 Using contact: {contact_name or 'auto-create skipped'}")
+
         # Prepare base deal data from pipeline
         deal_data = {
             "doctype": "CRM Deal",
             "deal_name": pipeline_doc.lead_name or pipeline_doc.pipeline_name,
             "pipeline": pipeline_doc.name,
-            "organization": existing_organization or pipeline_doc.organization,
-            "organization_name": pipeline_doc.organization_name,
+            "organization": organization_name,
+            "organization_name": organization_display_name or pipeline_doc.organization_name,
             "website": pipeline_doc.website,
             "lead_name": pipeline_doc.lead_name,
             "organization_owner": pipeline_doc.organization_owner,
@@ -220,10 +328,10 @@ def convert_to_deal(pipeline, deal=None, existing_contact=None, existing_organiz
             "mobile_no": pipeline_doc.mobile_no,
         }
 
-        # Add contact if provided
-        if existing_contact:
-            deal_data["contact"] = existing_contact
-            print(f"👤 Contact set: {existing_contact}")
+        # Add contact if provided/ensured
+        if contact_name:
+            deal_data["contact"] = contact_name
+            print(f"👤 Contact set: {contact_name}")
 
         # Add custom fields if they exist
         if hasattr(pipeline_doc, 'est_pipeline_value') and pipeline_doc.est_pipeline_value:
@@ -254,6 +362,18 @@ def convert_to_deal(pipeline, deal=None, existing_contact=None, existing_organiz
         deal_doc = frappe.get_doc(deal_data)
         deal_doc.insert(ignore_permissions=True)
         print(f"✅ Deal created successfully: {deal_doc.name}")
+
+        if organization_name:
+            pipeline_doc.organization = organization_name
+            if organization_display_name:
+                pipeline_doc.organization_name = organization_display_name
+
+        pipeline_meta = pipeline_doc.meta
+        if contact_name:
+            if pipeline_meta.has_field("contact_person"):
+                pipeline_doc.contact_person = contact_name
+            if pipeline_meta.has_field("contact"):
+                pipeline_doc.contact = contact_name
 
         # Link deal back to pipeline if deals child table exists
         if hasattr(pipeline_doc, 'deals'):
@@ -517,8 +637,9 @@ def get_data(
 		if not rows:
 			rows = default_rows
 
-		if not kanban_columns and column_field:
-			field_meta = frappe.get_meta(doctype).get_field(column_field)
+		field_meta = frappe.get_meta(doctype).get_field(column_field) if column_field else None
+
+		if not kanban_columns and field_meta:
 			if field_meta.fieldtype == "Link":
 				kanban_columns = frappe.get_all(
 					field_meta.options,
@@ -548,10 +669,27 @@ def get_data(
 		# Import convert_filter_to_tuple and get_records_based_on_order from crm.api.doc
 		from crm.api.doc import convert_filter_to_tuple, get_records_based_on_order
 		
+		status_color_map = {}
+		if (
+			field_meta
+			and field_meta.fieldtype == "Link"
+			and field_meta.options
+		):
+			status_meta = frappe.get_meta(field_meta.options)
+			has_color_field = any(df.fieldname == "color" for df in status_meta.fields)
+			if has_color_field:
+				status_color_map = {
+					doc.name: doc.get("color")
+					for doc in frappe.get_all(field_meta.options, fields=["name", "color"])
+				}
+
 		for kc in kanban_columns:
 			# Ensure delete property exists (default to False)
 			if "delete" not in kc:
 				kc["delete"] = False
+
+			if status_color_map and not kc.get("color"):
+				kc["color"] = status_color_map.get(kc.get("name"))
 			
 			# Start with base filters
 			column_filters = []
