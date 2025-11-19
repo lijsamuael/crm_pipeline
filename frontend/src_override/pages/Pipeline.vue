@@ -838,6 +838,42 @@ const dealTabs = createResource({
     type: 'Quick Entry'
   },
   auto: false,
+  transform: (tabs) => {
+    // If pipeline has an organization, filter deals by organization
+    if (doc.value?.organization && tabs) {
+      tabs.forEach((tab) => {
+        if (tab.sections) {
+          tab.sections.forEach((section) => {
+            if (section.columns) {
+              section.columns.forEach((column) => {
+                if (column.fields) {
+                  column.fields.forEach((field) => {
+                    // Find the deal field (Link to CRM Deal)
+                    if (field.fieldtype === 'Link' && field.options === 'CRM Deal') {
+                      // Parse existing link_filters or create new object
+                      let existingFilters = {}
+                      if (field.link_filters) {
+                        try {
+                          existingFilters = JSON.parse(field.link_filters)
+                        } catch (e) {
+                          existingFilters = {}
+                        }
+                      }
+                      // Add organization filter
+                      existingFilters.organization = doc.value.organization
+                      // Convert back to JSON string
+                      field.link_filters = JSON.stringify(existingFilters)
+                    }
+                  })
+                }
+              })
+            }
+          })
+        }
+      })
+    }
+    return tabs
+  },
 })
 
 // Resource for pipeline field layout (using CRM Master Pipeline Child)
