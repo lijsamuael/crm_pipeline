@@ -829,15 +829,85 @@ const pipelinesSummary = computed(() => {
   }
 })
 
-// Resource for deal field layout
+// Resource for deal field layout with dynamic cache based on organization
 const dealTabs = createResource({
   url: 'crm.fcrm.doctype.crm_fields_layout.crm_fields_layout.get_fields_layout',
-  cache: ['QuickEntry', 'CRM Pipeline Items'],
+  cache: () => ['QuickEntry', 'CRM Pipeline Items', doc.value?.organization || 'no-org', props.pipelineId],
   params: { 
     doctype: 'CRM Pipeline Items', 
     type: 'Quick Entry'
   },
   auto: false,
+  transform: (tabs) => {
+    // Always use current doc.value to get the latest organization
+    const currentOrg = doc.value?.organization
+    if (currentOrg && tabs) {
+      tabs.forEach((tab) => {
+        if (tab.sections) {
+          tab.sections.forEach((section) => {
+            if (section.columns) {
+              section.columns.forEach((column) => {
+                if (column.fields) {
+                  column.fields.forEach((field) => {
+                    // Find the deal field (Link to CRM Deal)
+                    if (field.fieldtype === 'Link' && field.options === 'CRM Deal') {
+                      // Parse existing link_filters or create new object
+                      let existingFilters = {}
+                      if (field.link_filters) {
+                        try {
+                          existingFilters = JSON.parse(field.link_filters)
+                        } catch (e) {
+                          existingFilters = {}
+                        }
+                      }
+                      // Add organization filter with current organization
+                      existingFilters.organization = currentOrg
+                      // Convert back to JSON string
+                      field.link_filters = JSON.stringify(existingFilters)
+                    }
+                  })
+                }
+              })
+            }
+          })
+        }
+      })
+    } else if (tabs) {
+      // If no organization, remove any organization filter that might exist
+      tabs.forEach((tab) => {
+        if (tab.sections) {
+          tab.sections.forEach((section) => {
+            if (section.columns) {
+              section.columns.forEach((column) => {
+                if (column.fields) {
+                  column.fields.forEach((field) => {
+                    if (field.fieldtype === 'Link' && field.options === 'CRM Deal') {
+                      if (field.link_filters) {
+                        try {
+                          const existingFilters = JSON.parse(field.link_filters)
+                          delete existingFilters.organization
+                          // Only keep the filter if there are other filters, otherwise remove it
+                          if (Object.keys(existingFilters).length > 0) {
+                            field.link_filters = JSON.stringify(existingFilters)
+                          } else {
+                            field.link_filters = null
+                          }
+                        } catch (e) {
+                          // If parsing fails, just remove the link_filters
+                          field.link_filters = null
+                        }
+                      }
+                    }
+                  })
+                }
+              })
+            }
+          })
+        }
+      })
+    }
+    return tabs
+  },
 })
 
 // Resource for pipeline field layout (using CRM Master Pipeline Child)
@@ -923,12 +993,26 @@ watch(doc, async (newDoc) => {
   }
 }, { immediate: true, deep: true })
 
-// Watch for modal opening to reset form
+// Watch for pipelineId changes to reload deal tabs
+watch(() => props.pipelineId, () => {
+  // Reload when navigating to a different pipeline
+  dealTabs.reload()
+})
+
+// Watch for organization changes to reload deal tabs with correct filter
+watch(() => doc.value?.organization, (newOrg, oldOrg) => {
+  // Reload deal tabs when organization changes to update filters
+  if (newOrg !== oldOrg) {
+    dealTabs.reload()
+  }
+})
+
+// Watch for modal opening to reset form and reload with current organization
 watch(showAddDealModal, (show) => {
   if (show && !editingDeal.value) {
     // Reset for new deal
     newDeal.doc = {}
-    // Load the custom field layout
+    // Always reload to get fresh data with current organization filter
     dealTabs.reload()
   }
 })
