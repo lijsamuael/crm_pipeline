@@ -26,14 +26,13 @@
         <ListRowItem
           :item="item"
           @click="listViewRef.toggleRow(row['reference_docname'])"
-          class="!w-full"
         >
           <template #default="{ label }">
             <div
               v-if="column.key === 'title'"
-              class="truncate text-base flex gap-2 w-full"
+              class="truncate text-base flex gap-2"
             >
-              <span class="max-w-[90%] truncate">
+              <span>
                 {{ label }}
               </span>
               <FeatherIcon
@@ -103,7 +102,6 @@ const listViewRef = ref(null)
 const viewLinkedDoc = (doc) => {
   let page = ''
   let id = ''
-  let openDesk = false
   switch (doc.reference_doctype) {
     case 'CRM Lead':
       page = 'leads'
@@ -125,11 +123,6 @@ const viewLinkedDoc = (doc) => {
       page = 'organizations'
       id = doc.reference_docname
       break
-    case 'CRM Notification':
-      page = 'crm-notification'
-      id = doc.reference_docname
-      openDesk = true
-      break
     case 'FCRM Note':
       page = 'notes'
       id = `view?open=${doc.reference_docname}`
@@ -137,11 +130,7 @@ const viewLinkedDoc = (doc) => {
     default:
       break
   }
-  let base = '/crm'
-  if (openDesk) {
-    base = '/app'
-  }
-  window.open(`${base}/${page}/${id}`)
+  window.open(`/crm/${page}/${id}`)
 }
 
 const getDoctypeName = (doctype) => {

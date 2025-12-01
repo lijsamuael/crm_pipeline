@@ -169,16 +169,8 @@
 import AddExistingUserModal from '@/components/Modals/AddExistingUserModal.vue'
 import { activeSettingsPage } from '@/composables/settings'
 import { usersStore } from '@/stores/users'
-import { DropdownOption } from '@/utils'
-import {
-  Dropdown,
-  Avatar,
-  TextInput,
-  toast,
-  call,
-  FeatherIcon,
-  Tooltip,
-} from 'frappe-ui'
+import { TemplateOption, DropdownOption } from '@/utils'
+import { Avatar, TextInput, toast, call, FeatherIcon, Tooltip } from 'frappe-ui'
 import { ref, computed, onMounted } from 'vue'
 
 const { users, isAdmin, isManager } = usersStore()
@@ -216,19 +208,29 @@ function getMoreOptions(user) {
   let options = [
     {
       label: __('Remove'),
-      icon: 'trash-2',
-      onClick: (e) => {
-        e.preventDefault()
-        e.stopPropagation()
-        confirmRemove.value = true
-      },
+      component: (props) =>
+        TemplateOption({
+          option: __('Remove'),
+          icon: 'trash-2',
+          active: props.active,
+          onClick: (e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            confirmRemove.value = true
+          },
+        }),
       condition: () => !confirmRemove.value,
     },
     {
       label: __('Confirm Remove'),
-      icon: 'trash-2',
-      theme: 'red',
-      onClick: () => removeUser(user, true),
+      component: (props) =>
+        TemplateOption({
+          option: __('Confirm Remove'),
+          icon: 'trash-2',
+          active: props.active,
+          theme: 'danger',
+          onClick: () => removeUser(user, true),
+        }),
       condition: () => confirmRemove.value,
     },
   ]
@@ -240,35 +242,38 @@ function getDropdownOptions(user) {
   let options = [
     {
       label: __('Admin'),
-      component: () =>
+      component: (props) =>
         DropdownOption({
           option: __('Admin'),
           icon: 'shield',
+          active: props.active,
           selected: user.role === 'System Manager',
+          onClick: () => updateRole(user, 'System Manager'),
         }),
-      onClick: () => updateRole(user, 'System Manager'),
       condition: () => isAdmin(),
     },
     {
       label: __('Manager'),
-      component: () =>
+      component: (props) =>
         DropdownOption({
           option: __('Manager'),
           icon: 'briefcase',
+          active: props.active,
           selected: user.role === 'Sales Manager',
+          onClick: () => updateRole(user, 'Sales Manager'),
         }),
-      onClick: () => updateRole(user, 'Sales Manager'),
       condition: () => isManager(),
     },
     {
       label: __('Sales User'),
-      component: () =>
+      component: (props) =>
         DropdownOption({
           option: __('Sales User'),
           icon: 'user-check',
+          active: props.active,
           selected: user.role === 'Sales User',
+          onClick: () => updateRole(user, 'Sales User'),
         }),
-      onClick: () => updateRole(user, 'Sales User'),
     },
   ]
 

@@ -178,27 +178,21 @@
                       @change="(e) => fieldChange(e.target.checked, field, row)"
                     />
                   </div>
-                  <TimePicker
-                    v-else-if="field.fieldtype === 'Time'"
-                    :value="row[field.fieldname]"
-                    variant="outline"
-                    :format="getFormat('', '', false, true, false)"
-                    input-class="border-none text-sm text-ink-gray-8"
-                    @change="(v) => fieldChange(v, field, row)"
-                  />
                   <DatePicker
                     v-else-if="field.fieldtype === 'Date'"
                     :value="row[field.fieldname]"
+                    icon-left=""
                     variant="outline"
-                    :format="getFormat('', '', true, false, false)"
+                    :formatter="(date) => getFormat(date, '', true)"
                     input-class="border-none text-sm text-ink-gray-8"
                     @change="(v) => fieldChange(v, field, row)"
                   />
                   <DateTimePicker
                     v-else-if="field.fieldtype === 'Datetime'"
                     :value="row[field.fieldname]"
+                    icon-left=""
                     variant="outline"
-                    :format="getFormat('', '', true, true, false)"
+                    :formatter="(date) => getFormat(date, '', true, true)"
                     input-class="border-none text-sm text-ink-gray-8"
                     @change="(v) => fieldChange(v, field, row)"
                   />
@@ -355,7 +349,6 @@ import { createDocument } from '@/composables/document'
 import {
   FormControl,
   Checkbox,
-  TimePicker,
   DateTimePicker,
   DatePicker,
   Tooltip,
