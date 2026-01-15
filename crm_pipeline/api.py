@@ -618,6 +618,10 @@ def get_data(
 		# check if rows has group_by_field if not add it
 		if group_by_field and group_by_field not in rows:
 			rows.append(group_by_field)
+		
+		# Always include custom_note_type for FCRM Note (do this at the end to ensure it's included)
+		if doctype == "FCRM Note" and "custom_note_type" not in rows:
+			rows.append("custom_note_type")
 
 		data = (
 			frappe.get_list(

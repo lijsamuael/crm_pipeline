@@ -2014,5 +2014,53 @@
   "property_type": "Data",
   "row_name": null,
   "value": "[\"details\", \"organization\", \"website\", \"territory\", \"industry\", \"job_title\", \"source\", \"lead_owner\", \"person_tab\", \"salutation\", \"first_name\", \"last_name\", \"email\", \"mobile_no\", \"organization_tab\", \"section_break_uixv\", \"naming_series\", \"lead_name\", \"middle_name\", \"gender\", \"phone\", \"column_break_dbsv\", \"status\", \"no_of_employees\", \"annual_revenue\", \"image\", \"converted\", \"custom_pipeline\", \"products_tab\", \"products\", \"section_break_ggwh\", \"total\", \"column_break_uisv\", \"net_total\", \"sla_tab\", \"sla\", \"sla_creation\", \"column_break_ffnp\", \"sla_status\", \"communication_status\", \"response_details_section\", \"response_by\", \"column_break_pweh\", \"first_response_time\", \"first_responded_on\", \"log_tab\", \"status_change_log\"]"
+ },
+ {
+  "default_value": null,
+  "doc_type": "CRM Task",
+  "docstatus": 0,
+  "doctype": "Property Setter",
+  "doctype_or_field": "DocType",
+  "field_name": null,
+  "is_system_generated": 0,
+  "modified": "2026-01-15 22:07:13.186556",
+  "module": null,
+  "name": "CRM Task-main-field_order",
+  "property": "field_order",
+  "property_type": "Data",
+  "row_name": null,
+  "value": "[\"title\", \"task_type\", \"priority\", \"start_date\", \"reference_doctype\", \"reference_docname\", \"column_break_cqua\", \"assigned_to\", \"status\", \"due_date\", \"section_break_bzhd\", \"description\"]"
+ },
+ {
+  "default_value": null,
+  "doc_type": "FCRM Note",
+  "docstatus": 0,
+  "doctype": "Property Setter",
+  "doctype_or_field": "DocType",
+  "field_name": null,
+  "is_system_generated": 0,
+  "modified": "2026-01-15 22:07:39.220110",
+  "module": null,
+  "name": "FCRM Note-main-field_order",
+  "property": "field_order",
+  "property_type": "Data",
+  "row_name": null,
+  "value": "[\"title\", \"note_type\", \"content\", \"reference_doctype\", \"reference_docname\"]"
+ },
+ {
+  "default_value": null,
+  "doc_type": "FCRM Note",
+  "docstatus": 0,
+  "doctype": "Property Setter",
+  "doctype_or_field": "DocField",
+  "field_name": "custom_note_type",
+  "is_system_generated": 1,
+  "modified": "2026-01-16 01:55:57.097185",
+  "module": null,
+  "name": "FCRM Note-custom_note_type-in_standard_filter",
+  "property": "in_standard_filter",
+  "property_type": "Check",
+  "row_name": null,
+  "value": "1"
  }
 ]

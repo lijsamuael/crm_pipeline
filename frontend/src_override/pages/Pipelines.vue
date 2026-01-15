@@ -553,6 +553,7 @@ const showNoteModal = ref(false)
 const note = ref({
   title: '',
   content: '',
+  custom_note_type: '',
 })
 
 function showNote(name) {
@@ -568,6 +569,7 @@ const task = ref({
   due_date: '',
   priority: 'Low',
   status: 'Backlog',
+  custom_task_type: '',
 })
 
 function showTask(name) {
