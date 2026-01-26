@@ -7,5 +7,7 @@ node_modules
 __pycache__
 
 # Frontend build artifacts
-crm_pipeline/public/frontend/assets/
+crm_pipeline/public/frontend/
+crm_pipeline/www/crm.html
+frontend/src/
 crm/www/

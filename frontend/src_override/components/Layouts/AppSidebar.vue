@@ -213,7 +213,7 @@ const links = [
     to: 'Dashboard',
   },
   {
-    label: 'Leads',
+    label: 'Leads & Prospects',
     icon: LeadsIcon,
     to: 'Leads',
   },
@@ -223,7 +223,7 @@ const links = [
     to: 'Pipelines',
   },
   {
-    label: 'Deals',
+    label: 'Deals & Opportunities',
     icon: DealsIcon,
     to: 'Deals',
   },

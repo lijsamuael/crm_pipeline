@@ -277,6 +277,9 @@ fixtures = [
         "dt": "CRM Fields Layout",
         # Only manage Pipeline-related layouts, not CRM Lead/Deal/Organization/Contact layouts
         "filters": [["dt", "in", ["CRM Pipeline", "CRM Pipeline Items", "CRM Master Pipeline Child"]]],
+    },
+    {
+        "dt": "Translation",
     }
 ]
 
