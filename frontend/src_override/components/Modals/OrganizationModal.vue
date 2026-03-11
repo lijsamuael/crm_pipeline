@@ -101,6 +101,9 @@ const show = defineModel()
 const loading = ref(false)
 const error = ref(null)
 
+const { document: organization, triggerOnBeforeCreate } =
+  useDocument('CRM Organization')
+
 const MALAYSIA_STATES = [
   'Johor', 'Kedah', 'Kelantan', 'Melaka', 'Negeri Sembilan',
   'Pahang', 'Pulau Pinang', 'Perak', 'Perlis', 'Selangor',
@@ -113,12 +116,14 @@ const MALAYSIA_STATES = [
 
 const malaysiaStateOptions = MALAYSIA_STATES.map(s => ({ label: s, value: s }))
 
-const isMalaysia = computed(() => {
-  return organization.doc?.custom_country === 'Malaysia'
+const siteDefaultCountry = ref('')
+call('fr8labs_custom_crm.fr8labs_custom_crm.sync_customer_fr8labs.app_utils.get_site_default_country').then((r) => {
+  siteDefaultCountry.value = r || ''
 })
 
-const { document: organization, triggerOnBeforeCreate } =
-  useDocument('CRM Organization')
+const isMalaysia = computed(() => {
+  return siteDefaultCountry.value === 'Malaysia' && organization.doc?.custom_country === 'Malaysia'
+})
 
 async function createOrganization() {
   loading.value = true

@@ -77,19 +77,24 @@
         doctype="CRM Deal"
       />
 
-      <div v-if="isMalaysia" class="mt-4 flex flex-col gap-3">
-        <FormControl
-          type="select"
-          :label="__('State')"
-          v-model="malaysiaState"
-          :options="malaysiaStateOptions"
-        />
-        <FormControl
-          type="text"
-          :label="__('City')"
-          v-model="malaysiaCity"
-          :placeholder="__('e.g. Kuala Lumpur')"
-        />
+      <div v-if="isMalaysia" class="mt-4">
+        <div class="mb-3 rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-700">
+          {{ __('This lead is from Malaysia. State and City are required for e-invoicing compliance.') }}
+        </div>
+        <div class="flex flex-col gap-3">
+          <FormControl
+            type="select"
+            :label="__('State')"
+            v-model="malaysiaState"
+            :options="malaysiaStateOptions"
+          />
+          <FormControl
+            type="text"
+            :label="__('City')"
+            v-model="malaysiaCity"
+            :placeholder="__('e.g. Kuala Lumpur')"
+          />
+        </div>
       </div>
 
       <ErrorMessage class="mt-4" :message="error" />
@@ -156,8 +161,13 @@ const malaysiaStateOptions = MALAYSIA_STATES.map(s => ({ label: s, value: s }))
 const malaysiaState = ref('')
 const malaysiaCity = ref('')
 
+const siteDefaultCountry = ref('')
+call('fr8labs_custom_crm.fr8labs_custom_crm.sync_customer_fr8labs.app_utils.get_site_default_country').then((r) => {
+  siteDefaultCountry.value = r || ''
+})
+
 const isMalaysia = computed(() => {
-  return props.lead?.custom_country === 'Malaysia'
+  return siteDefaultCountry.value === 'Malaysia' && props.lead?.custom_country === 'Malaysia'
 })
 
 const { triggerConvertToDeal } = useDocument('CRM Lead', props.lead.name)

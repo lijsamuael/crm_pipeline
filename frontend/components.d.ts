@@ -193,7 +193,6 @@ declare module 'vue' {
     ListRows: typeof import('./src/components/ListViews/ListRows.vue')['default']
     LoadingIndicator: typeof import('./src/components/Icons/LoadingIndicator.vue')['default']
     LostReasonModal: typeof import('./src/components/Modals/LostReasonModal.vue')['default']
-    LucideCalendar: typeof import('~icons/lucide/calendar')['default']
     LucideChevronLeft: typeof import('~icons/lucide/chevron-left')['default']
     MarkAsDoneIcon: typeof import('./src/components/Icons/MarkAsDoneIcon.vue')['default']
     MaximizeIcon: typeof import('./src/components/Icons/MaximizeIcon.vue')['default']
